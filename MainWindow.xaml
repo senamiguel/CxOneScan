@@ -8,7 +8,7 @@
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:ThemeManager.RequestedTheme="Dark"
         mc:Ignorable="d"
-        Title="Checkmarx One CLI Wrapper — Pro" Height="870" Width="1300" MinWidth="1100" MinHeight="750" WindowStartupLocation="CenterScreen">
+        Title="CxOneScan — Checkmarx One Desktop Client" Height="850" Width="1300" MinWidth="1100" MinHeight="750" WindowStartupLocation="CenterScreen" Icon="app_logo.ico">
 
   <Window.Resources>
     <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
@@ -16,47 +16,11 @@
 
   <Grid Margin="15" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto" />
       <RowDefinition Height="*" />
       <RowDefinition Height="Auto" />
     </Grid.RowDefinitions>
 
-
-    <Border Grid.Row="0" Margin="0,0,0,10" Padding="12" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-      <Grid>
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-
-
-        <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock Text="CLI:" FontWeight="SemiBold" FontSize="13" Foreground="White" VerticalAlignment="Center" Margin="0,0,8,0"/>
-          <TextBox x:Name="txtCliPath" Text="C:\Checkmarx\cx.exe" Width="300" VerticalContentAlignment="Center" Padding="5" FontSize="12" Margin="0,0,8,0"/>
-          <Button Content="Procurar..." Padding="5,3" Click="BtnBrowseCli_Click" Cursor="Hand" Margin="0,0,5,0"/>
-          <Button Content="Instalar" Padding="5,3" Click="BtnInstallCli_Click" Style="{DynamicResource AccentButtonStyle}" Cursor="Hand" Margin="0,0,20,0"/>
-
-
-          <TextBlock Text="Tenant:" FontSize="13" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
-          <TextBox x:Name="txtTenant" Width="100" Padding="5" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,8,0" ui:ControlHelper.PlaceholderText="tenant"/>
-          <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" Margin="0,0,5,0">
-            <Run Text="API Key "/>
-            <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="#0078D7">
-              <Run Text="(Gerar)" />
-            </Hyperlink>
-            <Run Text=":" />
-          </TextBlock>
-          <PasswordBox x:Name="txtApiKey" Width="180" Padding="5" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,8,0"/>
-          <Button Content="Autenticar" Padding="8,3" Click="BtnAuth_Click" Style="{DynamicResource AccentButtonStyle}" Cursor="Hand" Margin="0,0,10,0"/>
-          <TextBlock Text="Status:" FontWeight="SemiBold" Foreground="White" VerticalAlignment="Center" Margin="0,0,5,0"/>
-          <TextBlock x:Name="lblAuthStatus" Text="Não Autenticado" Foreground="{DynamicResource TextFillColorDisabledBrush}" FontWeight="Bold" VerticalAlignment="Center"/>
-        </StackPanel>
-      </Grid>
-    </Border>
-
-
-    <TabControl x:Name="mainTabControl" Grid.Row="1" Margin="0,0,0,10">
-
+    <TabControl x:Name="mainTabControl" Grid.Row="0" Margin="0,0,0,10">
 
       <TabItem Header="📂 Projetos &amp; Scan">
         <Grid Margin="10">
@@ -65,7 +29,6 @@
             <ColumnDefinition Width="5"/>
             <ColumnDefinition Width="*"/>
           </Grid.ColumnDefinitions>
-
 
           <Border Grid.Column="0" Padding="12" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
             <Grid>
@@ -78,72 +41,59 @@
 
               <TextBlock Text="Projetos" FontWeight="SemiBold" FontSize="14" Foreground="White" Margin="0,0,0,10"/>
 
-
               <Grid Grid.Row="1" Margin="0,0,0,8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="txtNewProject" Padding="5" FontSize="12" ui:ControlHelper.PlaceholderText="Nome do Projeto..." VerticalContentAlignment="Center" Margin="0,0,5,0"/>
+                <TextBox x:Name="txtNewProject" Padding="5" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,5,0" ui:ControlHelper.PlaceholderText="Nome do Novo Projeto"/>
                 <Button Content="＋" Grid.Column="1" Click="BtnAddProject_Click" Style="{DynamicResource AccentButtonStyle}" Cursor="Hand" Width="35" ToolTip="Adicionar Projeto"/>
               </Grid>
-
 
               <DataGrid x:Name="dgProjects" Grid.Row="2"
                         AutoGenerateColumns="False"
                         CanUserAddRows="False"
-                        CanUserDeleteRows="False"
-                        SelectionMode="Single"
-                        SelectionChanged="DgProjects_SelectionChanged"
-                        HeadersVisibility="Column"
-                        GridLinesVisibility="Horizontal"
-                        IsReadOnly="False"
+                        HeadersVisibility="None"
                         Background="Transparent"
-                        BorderThickness="1"
-                        BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}"
+                        BorderThickness="0"
+                        SelectionChanged="DgProjects_SelectionChanged"
                         RowBackground="Transparent"
-                        AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}"
-                        Margin="0,0,0,8">
+                        AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}">
                 <DataGrid.Columns>
-                  <DataGridCheckBoxColumn Header="✓" Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="35"/>
-                  <DataGridTextColumn Header="Nome" Binding="{Binding Name}" Width="*" IsReadOnly="True"/>
-                  <DataGridTemplateColumn Header="" Width="35">
+                  <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="40" ElementStyle="{DynamicResource DefaultCheckBoxStyle}" EditingElementStyle="{DynamicResource DefaultCheckBoxStyle}"/>
+                  <DataGridTemplateColumn Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <Button Content="✕" Click="BtnRemoveProject_Click"
-                                FontSize="11" Padding="2" Cursor="Hand"
-                                ToolTip="Remover Projeto"
-                                Background="Transparent" BorderThickness="0"
-                                Foreground="#FF6B6B"
-                                HorizontalAlignment="Center"/>
+                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="White" FontSize="13"/>
+                      </DataTemplate>
+                    </DataGridTemplateColumn.CellTemplate>
+                  </DataGridTemplateColumn>
+                  <DataGridTemplateColumn Width="45">
+                    <DataGridTemplateColumn.CellTemplate>
+                      <DataTemplate>
+                        <Button Content="🗑️" Padding="5,2" Click="BtnRemoveProject_Click" Cursor="Hand" Background="Transparent" BorderBrush="Transparent" Foreground="#FF6B6B"/>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
                 </DataGrid.Columns>
               </DataGrid>
 
-
               <StackPanel Grid.Row="3">
-                <Button Content="📁 Importar Solution (.sln)" Click="BtnImportSolution_Click" HorizontalAlignment="Stretch" Padding="8,6" Margin="0,0,0,5" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}"/>
+                <Button Content="📁 Importar Solution (.sln)" Click="BtnImportSolution_Click" HorizontalAlignment="Stretch" Padding="8,6" Margin="0,10,0,5" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}"/>
                 <Button Content="🔍 Escanear Diretório (.csproj)" Click="BtnScanDirectory_Click" HorizontalAlignment="Stretch" Padding="8,6" Cursor="Hand"/>
               </StackPanel>
             </Grid>
           </Border>
 
-
           <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
-
 
           <Border Grid.Column="2" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
               <StackPanel>
 
-
                 <TextBlock x:Name="lblDetailTitle" Text="Selecione um projeto na lista" FontWeight="SemiBold" FontSize="14" Foreground="White" Margin="0,0,0,15"/>
 
-
                 <StackPanel x:Name="pnlProjectDetail" IsEnabled="False">
-
 
                   <TextBlock Text="Pasta Local do Projeto:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <Grid Margin="0,0,0,12">
@@ -155,22 +105,17 @@
                     <Button Content="Procurar..." Grid.Column="1" Padding="8,5" Margin="8,0,0,0" Click="BtnBrowseProjectFolder_Click" Cursor="Hand"/>
                   </Grid>
 
-
                   <TextBlock Text="Branch:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <TextBox x:Name="txtDetailBranch" Padding="5" FontSize="12" Margin="0,0,0,12" TextChanged="DetailField_TextChanged"/>
-
 
                   <TextBlock Text="Tags:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <TextBox x:Name="txtDetailTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="tag1,tag2,..." TextChanged="DetailField_TextChanged"/>
 
-
                   <TextBlock Text="Project Tags:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <TextBox x:Name="txtDetailProjectTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="key=value,..." TextChanged="DetailField_TextChanged"/>
 
-
                   <TextBlock Text="Project Groups:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <TextBox x:Name="txtDetailProjectGroups" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="group1,group2,..." TextChanged="DetailField_TextChanged"/>
-
 
                   <TextBlock Text="Tipos de Scan:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
@@ -179,28 +124,24 @@
                   </StackPanel>
                 </StackPanel>
 
-
                 <Separator Margin="0,5,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
-
 
                 <TextBlock Text="⚡ Ações em Lote" FontWeight="SemiBold" FontSize="14" Foreground="#FFD700" Margin="0,0,0,12"/>
                 <TextBlock Text="Aplicar valores aos projetos selecionados (☑):" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8" FontSize="12"/>
 
-                <Grid Margin="0,0,0,8">
+                <Grid Margin="0,0,0,10">
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <TextBox x:Name="txtBatchTags" ui:ControlHelper.PlaceholderText="Tags" Padding="5" FontSize="12" Margin="0,0,5,0"/>
-                  <TextBox x:Name="txtBatchProjectTags" ui:ControlHelper.PlaceholderText="Project Tags" Padding="5" FontSize="12" Grid.Column="1" Margin="0,0,5,0"/>
-                  <TextBox x:Name="txtBatchProjectGroups" ui:ControlHelper.PlaceholderText="Project Groups" Padding="5" FontSize="12" Grid.Column="2"/>
+                  <TextBox x:Name="txtBatchTags" Margin="0,0,8,0" ui:ControlHelper.PlaceholderText="Batch Tags"/>
+                  <TextBox x:Name="txtBatchProjectTags" Grid.Column="1" Margin="0,0,8,0" ui:ControlHelper.PlaceholderText="Batch Proj Tags"/>
+                  <TextBox x:Name="txtBatchProjectGroups" Grid.Column="2" ui:ControlHelper.PlaceholderText="Batch Proj Groups"/>
                 </Grid>
                 <Button Content="Aplicar Tags aos Projetos Selecionados" Click="BtnApplyBatchTags_Click" HorizontalAlignment="Stretch" Padding="8,6" Cursor="Hand" Margin="0,0,0,15"/>
 
-
                 <Separator Margin="0,0,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
-
 
                 <Button x:Name="btnScan" Content="🚀 Iniciar Scan em Lote" IsEnabled="False" HorizontalAlignment="Stretch" Height="44" Click="BtnScan_Click" Style="{DynamicResource AccentButtonStyle}" FontWeight="Bold" FontSize="14" Cursor="Hand"/>
               </StackPanel>
@@ -208,7 +149,6 @@
           </Border>
         </Grid>
       </TabItem>
-
 
       <TabItem Header="📊 Dashboard de Resultados">
         <Grid Margin="10">
@@ -276,10 +216,130 @@
           </DataGrid>
         </Grid>
       </TabItem>
+
+      <TabItem Header="⚙️ Configurações">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
+          <StackPanel Margin="15" MaxWidth="850" HorizontalAlignment="Left">
+            <TextBlock Text="Configurações do Sistema" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
+
+            <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="🖥️ Checkmarx One CLI (cx.exe)" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="Configure o caminho do executável do CLI ou instale a versão mais recente diretamente do GitHub." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBox x:Name="txtSettingCliPath" Padding="8" FontSize="13" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
+                  <Button Content="Procurar..." Grid.Column="1" Padding="15,8" Click="BtnSettingBrowseCli_Click" Cursor="Hand" Margin="0,0,8,0"/>
+                  <Button x:Name="btnSettingInstallCli" Content="Instalar/Atualizar CLI" Grid.Column="2" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingInstallCli_Click" Cursor="Hand"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="🔑 Credenciais &amp; Conexão" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="Informe seus dados do Checkmarx One para autenticação. A API Key será salva de forma segura usando criptografia local." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,15" TextWrapping="Wrap"/>
+                
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+
+                  <TextBlock Text="Tenant Name:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingTenant" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" ui:ControlHelper.PlaceholderText="Ex: minha-empresa"/>
+
+                  <TextBlock Grid.Row="1" VerticalAlignment="Center" Margin="0,0,0,10">
+                    <Run Text="API Key " Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                    <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="#0078D7">
+                      <Run Text="(Gerar)" />
+                    </Hyperlink>
+                    <Run Text=":" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                  </TextBlock>
+                  <PasswordBox x:Name="txtSettingApiKey" Grid.Row="1" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+
+                  <TextBlock Grid.Row="2" Text="Base URI:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingBaseUri" Grid.Row="2" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+
+                  <TextBlock Grid.Row="3" Text="Base Auth URI:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingBaseAuthUri" Grid.Row="3" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+                </Grid>
+
+                <Separator Margin="0,10,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
+                
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <Button x:Name="btnSettingAuth" Content="🔌 Autenticar e Testar" Padding="20,10" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingAuth_Click" Cursor="Hand"/>
+                  <TextBlock x:Name="lblSettingAuthStatus" Grid.Column="1" Text="Não Autenticado" VerticalAlignment="Center" Margin="15,0,0,0" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorDisabledBrush}"/>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="⚙️ Padrões de Scan" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="Configurações aplicadas por padrão a novos projetos importados ou criados." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,15" TextWrapping="Wrap"/>
+
+                <Grid>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                  </Grid.RowDefinitions>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+
+                  <TextBlock Text="Branch Padrão:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingDefaultBranch" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+
+                  <TextBlock Grid.Row="1" Text="Tipos de Scan:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
+                    <CheckBox x:Name="chkSettingDefaultSast" Content="SAST" FontSize="13" Margin="0,0,20,0"/>
+                    <CheckBox x:Name="chkSettingDefaultSca" Content="SCA" FontSize="13"/>
+                  </StackPanel>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Border Margin="0,0,0,20" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+              <StackPanel>
+                <TextBlock Text="🎨 Aparência" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                
+                <Grid>
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="150"/>
+                    <ColumnDefinition Width="*"/>
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Text="Tema do Aplicativo:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
+                  <ComboBox x:Name="cmbSettingTheme" Grid.Column="1" Padding="8" FontSize="13" SelectedIndex="0" Width="150" HorizontalAlignment="Left" SelectionChanged="CmbSettingTheme_SelectionChanged">
+                    <ComboBoxItem Content="Escuro (Dark)"/>
+                    <ComboBoxItem Content="Claro (Light)"/>
+                  </ComboBox>
+                </Grid>
+              </StackPanel>
+            </Border>
+
+            <Button Content="💾 Salvar Configurações" Padding="25,12" Style="{DynamicResource AccentButtonStyle}" Click="BtnSaveSettings_Click" FontWeight="SemiBold" FontSize="14" Cursor="Hand" Margin="0,0,0,30"/>
+          </StackPanel>
+        </ScrollViewer>
+      </TabItem>
     </TabControl>
 
-
-    <Border Grid.Row="2" Padding="10" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+    <Border Grid.Row="1" Padding="10" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
@@ -287,20 +347,20 @@
           <RowDefinition Height="120"/>
         </Grid.RowDefinitions>
 
-
         <Grid Margin="0,0,0,8">
           <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="Auto"/>
-            <ColumnDefinition Width="Auto"/>
+            <Grid.ColumnDefinition Width="Auto"/>
+            <Grid.ColumnDefinition Width="*"/>
+            <Grid.ColumnDefinition Width="Auto"/>
+            <Grid.ColumnDefinition Width="Auto"/>
+            <Grid.ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
           <TextBlock Text="Console de Saída" FontWeight="SemiBold" FontSize="14" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
-          <ProgressBar x:Name="progressBar" Grid.Column="1" Height="18" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" Margin="0,0,10,0"/>
-          <TextBlock x:Name="lblProgress" Grid.Column="2" Text="Pronto" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" FontSize="12" Margin="0,0,10,0" MinWidth="80"/>
-          <Button x:Name="btnCancel" Content="⛔ Cancelar" Grid.Column="3" Padding="10,5" Click="BtnCancel_Click" Cursor="Hand" IsEnabled="False" Foreground="#FF6B6B" FontWeight="SemiBold"/>
+          <ProgressBar x:Name="progressBar" Grid.Column="1" Height="18" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" Margin="0,0,15,0"/>
+          <TextBlock x:Name="lblProgress" Grid.Column="2" Text="Pronto" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" FontSize="12" Margin="0,0,15,0" MinWidth="80"/>
+          <TextBlock x:Name="lblFooterStatus" Grid.Column="3" Text="⚠️ Não Conectado" Foreground="Orange" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,15,0"/>
+          <Button x:Name="btnCancel" Content="⛔ Cancelar" Grid.Column="4" Padding="10,5" Click="BtnCancel_Click" Cursor="Hand" IsEnabled="False" Foreground="#FF6B6B" FontWeight="SemiBold"/>
         </Grid>
-
 
         <TextBox x:Name="txtConsole" Grid.Row="2" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"

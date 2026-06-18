@@ -30,9 +30,6 @@ public class StringToVisibilityConverter : IValueConverter
 
 public partial class MainWindow : Window
 {
-    private const string BaseUri = "https://ast.checkmarx.net";
-    private const string BaseAuthUri = "https://iam.checkmarx.net";
-
     public ObservableCollection<ProjectItem> SavedProjects { get; } = new();
     public ObservableCollection<ScanResult> ScanResults { get; } = new();
 
@@ -46,8 +43,9 @@ public partial class MainWindow : Window
         InitializeComponent();
         dgProjects.ItemsSource = SavedProjects;
         dgResults.ItemsSource = ScanResults;
+        
         LoadProjects();
-        txtApiKey.Password = LoadDecryptedApiKey();
+        LoadSettingsUI();
         WireCliServiceEvents();
     }
 
@@ -69,13 +67,69 @@ public partial class MainWindow : Window
         ProjectPersistenceService.Save(SavedProjects);
     }
 
+    private void LoadSettingsUI()
+    {
+        var settings = AppSettingsService.Instance;
+        
+        txtSettingCliPath.Text = settings.CliPath;
+        txtSettingTenant.Text = settings.Tenant;
+        txtSettingBaseUri.Text = settings.BaseUri;
+        txtSettingBaseAuthUri.Text = settings.BaseAuthUri;
+        txtSettingDefaultBranch.Text = settings.DefaultBranch;
+        chkSettingDefaultSast.IsChecked = settings.DefaultRunSast;
+        chkSettingDefaultSca.IsChecked = settings.DefaultRunSca;
+        
+        cmbSettingTheme.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
+        ApplyTheme(settings.Theme);
+
+        txtSettingApiKey.Password = LoadDecryptedApiKey();
+
+        UpdateFooterStatus();
+    }
+
+    private void UpdateFooterStatus()
+    {
+        var settings = AppSettingsService.Instance;
+        if (string.IsNullOrEmpty(settings.Tenant))
+        {
+            lblFooterStatus.Text = "⚠️ Não Configurado";
+            lblFooterStatus.Foreground = Brushes.Orange;
+        }
+        else
+        {
+            lblFooterStatus.Text = $"🔑 Tenant: {settings.Tenant}";
+            lblFooterStatus.Foreground = Brushes.LightGreen;
+        }
+    }
+
+    private void ApplyTheme(string theme)
+    {
+        if (theme == "Light")
+        {
+            iNKORE.UI.WPF.Modern.ThemeManager.Current.ApplicationTheme = iNKORE.UI.WPF.Modern.ApplicationTheme.Light;
+        }
+        else
+        {
+            iNKORE.UI.WPF.Modern.ThemeManager.Current.ApplicationTheme = iNKORE.UI.WPF.Modern.ApplicationTheme.Dark;
+        }
+    }
+
     private void BtnAddProject_Click(object sender, RoutedEventArgs e)
     {
         string newName = txtNewProject.Text.Trim();
         if (string.IsNullOrEmpty(newName)) return;
         if (SavedProjects.Any(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))) return;
 
-        SavedProjects.Add(new ProjectItem { Name = newName, IsSelected = true });
+        var settings = AppSettingsService.Instance;
+        SavedProjects.Add(new ProjectItem
+        {
+            Name = newName,
+            IsSelected = true,
+            Branch = settings.DefaultBranch,
+            RunSast = settings.DefaultRunSast,
+            RunSca = settings.DefaultRunSca
+        });
+        
         SaveProjects();
         txtNewProject.Clear();
     }
@@ -102,6 +156,16 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true) return;
 
         var projects = SolutionParserService.ParseSolution(dialog.FileName);
+        
+        // Override branch and scan settings with user defaults
+        var settings = AppSettingsService.Instance;
+        foreach (var p in projects)
+        {
+            p.Branch = settings.DefaultBranch;
+            p.RunSast = settings.DefaultRunSast;
+            p.RunSca = settings.DefaultRunSca;
+        }
+
         int added = AddProjectsToList(projects);
         AppendToConsole($"[IMPORTAÇÃO] {added} projeto(s) importado(s) de: {dialog.FileName}");
     }
@@ -116,6 +180,16 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog() != true) return;
 
         var projects = DirectoryScannerService.ScanDirectory(dialog.FolderName);
+        
+        // Override branch and scan settings with user defaults
+        var settings = AppSettingsService.Instance;
+        foreach (var p in projects)
+        {
+            p.Branch = settings.DefaultBranch;
+            p.RunSast = settings.DefaultRunSast;
+            p.RunSca = settings.DefaultRunSca;
+        }
+
         int added = AddProjectsToList(projects);
         AppendToConsole($"[SCANNER] {added} projeto(s) encontrado(s) em: {dialog.FolderName}");
     }
@@ -238,7 +312,7 @@ public partial class MainWindow : Window
         AppendToConsole($"[LOTE] Tags aplicadas a {selected.Count} projeto(s).");
     }
 
-    private void BtnBrowseCli_Click(object sender, RoutedEventArgs e)
+    private void BtnSettingBrowseCli_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new OpenFileDialog
         {
@@ -246,15 +320,16 @@ public partial class MainWindow : Window
             Title = "Selecione o executável do Checkmarx One CLI (cx.exe)"
         };
         if (dialog.ShowDialog() == true)
-            txtCliPath.Text = dialog.FileName;
+            txtSettingCliPath.Text = dialog.FileName;
     }
 
-    private async void BtnInstallCli_Click(object sender, RoutedEventArgs e)
+    private async void BtnSettingInstallCli_Click(object sender, RoutedEventArgs e)
     {
         string url = "https://github.com/Checkmarx/ast-cli/releases/latest/download/ast-cli_windows_x64.zip";
         string destFolder = @"C:\Checkmarx";
         string zipPath = Path.Combine(Path.GetTempPath(), "ast-cli.zip");
 
+        btnSettingInstallCli.IsEnabled = false;
         AppendToConsole("Baixando Checkmarx CLI mais recente pelo GitHub...");
         try
         {
@@ -265,76 +340,117 @@ public partial class MainWindow : Window
             if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
             ZipFile.ExtractToDirectory(zipPath, destFolder, true);
 
-            txtCliPath.Text = Path.Combine(destFolder, "cx.exe");
-            AppendToConsole("CLI instalado com sucesso em: " + txtCliPath.Text);
+            txtSettingCliPath.Text = Path.Combine(destFolder, "cx.exe");
+            AppendToConsole("CLI instalado com sucesso em: " + txtSettingCliPath.Text);
         }
         catch (Exception ex)
         {
             AppendToConsole("Erro ao instalar CLI: " + ex.Message);
         }
+        finally
+        {
+            btnSettingInstallCli.IsEnabled = true;
+        }
     }
 
-    private async void BtnAuth_Click(object sender, RoutedEventArgs e)
+    private async void BtnSettingAuth_Click(object sender, RoutedEventArgs e)
     {
-        string cliPath = txtCliPath.Text;
-        string tenant = txtTenant.Text.Trim();
-        string apiKey = txtApiKey.Password;
+        string cliPath = txtSettingCliPath.Text;
+        string tenant = txtSettingTenant.Text.Trim();
+        string apiKey = txtSettingApiKey.Password;
+        string baseUri = txtSettingBaseUri.Text.Trim();
+        string baseAuthUri = txtSettingBaseAuthUri.Text.Trim();
 
-        if (!ValidateAuthInputs(cliPath, tenant, apiKey)) return;
+        if (!File.Exists(cliPath))
+        {
+            MessageBox.Show("Caminho do CLI inválido. Verifique se o arquivo cx.exe existe.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey))
+        {
+            MessageBox.Show("Tenant Name e API Key são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         SaveEncryptedApiKey(apiKey);
-        SetAuthStatus("Autenticando...", Brushes.Orange);
-        btnScan.IsEnabled = false;
+        
+        lblSettingAuthStatus.Text = "Autenticando...";
+        lblSettingAuthStatus.Foreground = Brushes.Orange;
+        btnSettingAuth.IsEnabled = false;
 
         AppendToConsole("--- Iniciando Autenticação ---");
-        string args = $"auth validate --tenant \"{tenant}\" --apikey \"{apiKey}\" --base-uri \"{BaseUri}\" --base-auth-uri \"{BaseAuthUri}\"";
+        string args = $"auth validate --tenant \"{tenant}\" --apikey \"{apiKey}\" --base-uri \"{baseUri}\" --base-auth-uri \"{baseAuthUri}\"";
 
         using var cts = new CancellationTokenSource();
         bool success = await _cliService.RunScanAsync(cliPath, args, null!, apiKey, cts.Token);
 
         if (success)
         {
-            SetAuthStatus("Autenticado", Brushes.Green);
+            lblSettingAuthStatus.Text = "Autenticado";
+            lblSettingAuthStatus.Foreground = Brushes.LightGreen;
             btnScan.IsEnabled = true;
             AppendToConsole("Autenticação validada com sucesso.\n");
         }
         else
         {
-            SetAuthStatus("Falha", Brushes.Red);
+            lblSettingAuthStatus.Text = "Falha na Validação";
+            lblSettingAuthStatus.Foreground = Brushes.Red;
             AppendToConsole("Falha na validação de autenticação. Verifique suas credenciais.\n");
         }
+        btnSettingAuth.IsEnabled = true;
+        UpdateFooterStatus();
     }
 
-    private bool ValidateAuthInputs(string cliPath, string tenant, string apiKey)
+    private void BtnSaveSettings_Click(object sender, RoutedEventArgs e)
     {
-        if (!File.Exists(cliPath))
+        var settings = AppSettingsService.Instance;
+        settings.CliPath = txtSettingCliPath.Text;
+        settings.Tenant = txtSettingTenant.Text.Trim();
+        settings.BaseUri = txtSettingBaseUri.Text.Trim();
+        settings.BaseAuthUri = txtSettingBaseAuthUri.Text.Trim();
+        settings.DefaultBranch = txtSettingDefaultBranch.Text.Trim();
+        settings.DefaultRunSast = chkSettingDefaultSast.IsChecked == true;
+        settings.DefaultRunSca = chkSettingDefaultSca.IsChecked == true;
+        settings.Theme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
+
+        if (!string.IsNullOrEmpty(txtSettingApiKey.Password))
         {
-            MessageBox.Show("Caminho do CLI inválido. Verifique se o arquivo cx.exe existe.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-            return false;
+            SaveEncryptedApiKey(txtSettingApiKey.Password);
         }
-        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey))
-        {
-            MessageBox.Show("Tenant Name e API Key são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
-        }
-        return true;
+
+        AppSettingsService.Save(settings);
+        ApplyTheme(settings.Theme);
+        UpdateFooterStatus();
+        
+        MessageBox.Show("Configurações salvas com sucesso!", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
-    private void SetAuthStatus(string text, Brush color)
+    private void CmbSettingTheme_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        lblAuthStatus.Text = text;
-        lblAuthStatus.Foreground = color;
+        if (cmbSettingTheme == null) return;
+        string newTheme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
+        ApplyTheme(newTheme);
     }
 
     private async void BtnScan_Click(object sender, RoutedEventArgs e)
     {
-        string cliPath = txtCliPath.Text;
-        string tenant = txtTenant.Text.Trim();
-        string apiKey = txtApiKey.Password;
+        var settings = AppSettingsService.Instance;
+        string cliPath = settings.CliPath;
+        string tenant = settings.Tenant;
+        string apiKey = LoadDecryptedApiKey();
 
         var selectedProjects = SavedProjects.Where(p => p.IsSelected).ToList();
 
-        if (!ValidateScanInputs(cliPath, selectedProjects)) return;
+        if (!File.Exists(cliPath))
+        {
+            MessageBox.Show("Caminho do CLI inválido nas configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+        if (selectedProjects.Count == 0)
+        {
+            MessageBox.Show("Selecione pelo menos um projeto na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
 
         SetScanRunningState(true);
         _scanCts = new CancellationTokenSource();
@@ -362,7 +478,7 @@ public partial class MainWindow : Window
             string args = CxCliService.BuildScanArguments(
                 proj.Name, proj.Branch, scanTypes,
                 proj.Tags, proj.ProjectTags, proj.ProjectGroups,
-                tenant, apiKey, BaseUri, BaseAuthUri, reportDir);
+                tenant, apiKey, settings.BaseUri, settings.BaseAuthUri, reportDir);
 
             bool success = await _cliService.RunScanAsync(cliPath, args, workingDir, apiKey, _scanCts.Token);
 
@@ -383,21 +499,6 @@ public partial class MainWindow : Window
 
         if (ScanResults.Count > 0)
             mainTabControl.SelectedIndex = 1;
-    }
-
-    private bool ValidateScanInputs(string cliPath, List<ProjectItem> selectedProjects)
-    {
-        if (!File.Exists(cliPath))
-        {
-            MessageBox.Show("Caminho do CLI inválido.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-            return false;
-        }
-        if (selectedProjects.Count == 0)
-        {
-            MessageBox.Show("Selecione pelo menos um projeto na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return false;
-        }
-        return true;
     }
 
     private static string ResolveWorkingDirectory(ProjectItem project)
