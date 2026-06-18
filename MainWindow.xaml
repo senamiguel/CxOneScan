@@ -8,7 +8,7 @@
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:ThemeManager.RequestedTheme="Dark"
         mc:Ignorable="d"
-        Title="CxOneScan — Checkmarx One Desktop Client" Height="850" Width="1300" MinWidth="1100" MinHeight="750" WindowStartupLocation="CenterScreen" Icon="app_logo.png">
+        Title="CxOneScan — Checkmarx One Desktop Client" Height="850" Width="1300" MinWidth="1100" MinHeight="750" WindowStartupLocation="CenterScreen" Icon="/app_logo.png">
 
   <Window.Resources>
     <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>

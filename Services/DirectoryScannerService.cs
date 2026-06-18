@@ -12,35 +12,27 @@ public static class DirectoryScannerService
         if (!Directory.Exists(rootPath))
             return result;
 
-        var csprojFiles = Directory.EnumerateFiles(rootPath, "*.csproj", SearchOption.AllDirectories);
-
-        foreach (string csprojPath in csprojFiles)
+        string folderName = Path.GetFileName(rootPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+        if (string.IsNullOrEmpty(folderName))
         {
-            string projectName = Path.GetFileNameWithoutExtension(csprojPath);
-            string projectDirectory = Path.GetDirectoryName(csprojPath) ?? rootPath;
-
-            if (IsExcludedPath(projectDirectory))
-                continue;
-
-            result.Add(new ProjectItem
-            {
-                Name = projectName,
-                IsSelected = true,
-                LocalPath = projectDirectory,
-                Branch = "main",
-                RunSast = true
-            });
+            folderName = new DirectoryInfo(rootPath).Name;
         }
 
-        return result;
-    }
+        var settings = AppSettingsService.Instance;
 
-    private static bool IsExcludedPath(string path)
-    {
-        string normalized = path.Replace('\\', '/').ToLowerInvariant();
-        return normalized.Contains("/obj/")
-            || normalized.Contains("/bin/")
-            || normalized.Contains("/node_modules/")
-            || normalized.Contains("/.vs/");
+        result.Add(new ProjectItem
+        {
+            Name = folderName,
+            IsSelected = true,
+            LocalPath = rootPath,
+            Branch = settings.DefaultBranch,
+            RunSast = settings.DefaultRunSast,
+            RunSca = settings.DefaultRunSca,
+            Tags = string.Empty,
+            ProjectTags = string.Empty,
+            ProjectGroups = string.Empty
+        });
+
+        return result;
     }
 }

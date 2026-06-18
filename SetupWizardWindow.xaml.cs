@@ -17,7 +17,7 @@ public partial class SetupWizardWindow : Window
 {
     private int _currentStep = 0;
     private readonly CxCliService _cliService = new();
-    private readonly string KeyFile = Path.Combine(
+    private readonly string KeyFile = System.IO.Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
         "CxDesktopWrapper", "secure_key.dat");
 
@@ -125,7 +125,7 @@ public partial class SetupWizardWindow : Window
     {
         string url = "https://github.com/Checkmarx/ast-cli/releases/latest/download/ast-cli_windows_x64.zip";
         string destFolder = @"C:\Checkmarx";
-        string zipPath = Path.Combine(Path.GetTempPath(), "ast-cli.zip");
+        string zipPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ast-cli.zip");
 
         btnInstallCli.IsEnabled = false;
         lblCliStatus.Text = "Baixando Checkmarx CLI mais recente...";
@@ -140,7 +140,7 @@ public partial class SetupWizardWindow : Window
             if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
             ZipFile.ExtractToDirectory(zipPath, destFolder, true);
 
-            txtCliPath.Text = Path.Combine(destFolder, "cx.exe");
+            txtCliPath.Text = System.IO.Path.Combine(destFolder, "cx.exe");
             lblCliStatus.Text = "CLI instalado com sucesso em: " + txtCliPath.Text;
             lblCliStatus.Foreground = Brushes.LightGreen;
         }
@@ -209,7 +209,7 @@ public partial class SetupWizardWindow : Window
     {
         try
         {
-            Directory.CreateDirectory(Path.GetDirectoryName(KeyFile)!);
+            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(KeyFile)!);
             byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
             byte[] encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
             File.WriteAllBytes(KeyFile, encryptedBytes);
