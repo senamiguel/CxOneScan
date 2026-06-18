@@ -8,7 +8,7 @@
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:ThemeManager.RequestedTheme="Dark"
         mc:Ignorable="d"
-        Title="CxOneScan — Configuração Inicial" Height="520" Width="750" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Icon="app_logo.ico">
+        Title="CxOneScan — Configuração Inicial" Height="520" Width="750" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Icon="app_logo.png">
 
     <Grid Margin="20" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>

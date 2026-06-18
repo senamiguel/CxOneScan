@@ -135,7 +135,7 @@ public partial class SetupWizardWindow : Window
         {
             using HttpClient client = new();
             var response = await client.GetByteArrayAsync(url);
-            File.WriteAllBytes(zipPath, response);
+            await File.WriteAllBytesAsync(zipPath, response);
 
             if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
             ZipFile.ExtractToDirectory(zipPath, destFolder, true);
