@@ -1,0 +1,541 @@
+using Microsoft.Win32;
+using System.Collections.ObjectModel;
+using System.Diagnostics;
+using System.Globalization;
+using System.IO;
+using System.IO.Compression;
+using System.Net.Http;
+using System.Security.Cryptography;
+using System.Text;
+using System.Windows;
+using System.Windows.Data;
+using System.Windows.Media;
+using CxDesktopWrapper.Models;
+using CxDesktopWrapper.Services;
+
+namespace CxDesktopWrapper;
+
+public class StringToVisibilityConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        return string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}
+
+public partial class MainWindow : Window
+{
+    private const string BaseUri = "https://ast.checkmarx.net";
+    private const string BaseAuthUri = "https://iam.checkmarx.net";
+
+    public ObservableCollection<ProjectItem> SavedProjects { get; } = new();
+    public ObservableCollection<ScanResult> ScanResults { get; } = new();
+
+    private readonly CxCliService _cliService = new();
+    private CancellationTokenSource? _scanCts;
+    private ProjectItem? _selectedProject;
+    private bool _isUpdatingDetail;
+
+    public MainWindow()
+    {
+        InitializeComponent();
+        dgProjects.ItemsSource = SavedProjects;
+        dgResults.ItemsSource = ScanResults;
+        LoadProjects();
+        txtApiKey.Password = LoadDecryptedApiKey();
+        WireCliServiceEvents();
+    }
+
+    private void WireCliServiceEvents()
+    {
+        _cliService.OutputReceived += text => AppendToConsole(text);
+        _cliService.ProgressChanged += percent => UpdateProgress(percent);
+    }
+
+    private void LoadProjects()
+    {
+        var loaded = ProjectPersistenceService.Load();
+        foreach (var p in loaded)
+            SavedProjects.Add(p);
+    }
+
+    private void SaveProjects()
+    {
+        ProjectPersistenceService.Save(SavedProjects);
+    }
+
+    private void BtnAddProject_Click(object sender, RoutedEventArgs e)
+    {
+        string newName = txtNewProject.Text.Trim();
+        if (string.IsNullOrEmpty(newName)) return;
+        if (SavedProjects.Any(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))) return;
+
+        SavedProjects.Add(new ProjectItem { Name = newName, IsSelected = true });
+        SaveProjects();
+        txtNewProject.Clear();
+    }
+
+    private void BtnRemoveProject_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is ProjectItem project)
+        {
+            SavedProjects.Remove(project);
+            if (_selectedProject == project)
+                ClearDetailPanel();
+            SaveProjects();
+        }
+    }
+
+    private void BtnImportSolution_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Solution files (*.sln)|*.sln",
+            Title = "Selecione um arquivo .sln"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        var projects = SolutionParserService.ParseSolution(dialog.FileName);
+        int added = AddProjectsToList(projects);
+        AppendToConsole($"[IMPORTAÇÃO] {added} projeto(s) importado(s) de: {dialog.FileName}");
+    }
+
+    private void BtnScanDirectory_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog
+        {
+            Title = "Selecione a pasta raiz para buscar projetos .csproj"
+        };
+
+        if (dialog.ShowDialog() != true) return;
+
+        var projects = DirectoryScannerService.ScanDirectory(dialog.FolderName);
+        int added = AddProjectsToList(projects);
+        AppendToConsole($"[SCANNER] {added} projeto(s) encontrado(s) em: {dialog.FolderName}");
+    }
+
+    private int AddProjectsToList(List<ProjectItem> projects)
+    {
+        int count = 0;
+        foreach (var p in projects)
+        {
+            if (SavedProjects.Any(existing => existing.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+            SavedProjects.Add(p);
+            count++;
+        }
+        if (count > 0) SaveProjects();
+        return count;
+    }
+
+    private void DgProjects_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (dgProjects.SelectedItem is ProjectItem project)
+            PopulateDetailPanel(project);
+        else
+            ClearDetailPanel();
+    }
+
+    private void PopulateDetailPanel(ProjectItem project)
+    {
+        _isUpdatingDetail = true;
+        _selectedProject = project;
+
+        lblDetailTitle.Text = $"Editando: {project.Name}";
+        pnlProjectDetail.IsEnabled = true;
+
+        txtDetailLocalPath.Text = project.LocalPath;
+        txtDetailBranch.Text = project.Branch;
+        txtDetailTags.Text = project.Tags;
+        txtDetailProjectTags.Text = project.ProjectTags;
+        txtDetailProjectGroups.Text = project.ProjectGroups;
+        chkDetailSast.IsChecked = project.RunSast;
+        chkDetailSca.IsChecked = project.RunSca;
+
+        _isUpdatingDetail = false;
+    }
+
+    private void ClearDetailPanel()
+    {
+        _isUpdatingDetail = true;
+        _selectedProject = null;
+
+        lblDetailTitle.Text = "Selecione um projeto na lista";
+        pnlProjectDetail.IsEnabled = false;
+
+        txtDetailLocalPath.Text = "";
+        txtDetailBranch.Text = "";
+        txtDetailTags.Text = "";
+        txtDetailProjectTags.Text = "";
+        txtDetailProjectGroups.Text = "";
+        chkDetailSast.IsChecked = false;
+        chkDetailSca.IsChecked = false;
+
+        _isUpdatingDetail = false;
+    }
+
+    private void DetailField_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+    {
+        if (_isUpdatingDetail || _selectedProject == null) return;
+
+        _selectedProject.LocalPath = txtDetailLocalPath.Text;
+        _selectedProject.Branch = txtDetailBranch.Text;
+        _selectedProject.Tags = txtDetailTags.Text;
+        _selectedProject.ProjectTags = txtDetailProjectTags.Text;
+        _selectedProject.ProjectGroups = txtDetailProjectGroups.Text;
+        SaveProjects();
+    }
+
+    private void DetailCheckbox_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_isUpdatingDetail || _selectedProject == null) return;
+
+        _selectedProject.RunSast = chkDetailSast.IsChecked == true;
+        _selectedProject.RunSca = chkDetailSca.IsChecked == true;
+        SaveProjects();
+    }
+
+    private void BtnBrowseProjectFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFolderDialog { Title = "Selecione a Pasta do Projeto" };
+        if (dialog.ShowDialog() == true)
+        {
+            txtDetailLocalPath.Text = dialog.FolderName;
+        }
+    }
+
+    private void BtnApplyBatchTags_Click(object sender, RoutedEventArgs e)
+    {
+        var selected = SavedProjects.Where(p => p.IsSelected).ToList();
+        if (selected.Count == 0)
+        {
+            MessageBox.Show("Selecione pelo menos um projeto (☑) na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        string batchTags = txtBatchTags.Text.Trim();
+        string batchProjectTags = txtBatchProjectTags.Text.Trim();
+        string batchProjectGroups = txtBatchProjectGroups.Text.Trim();
+
+        foreach (var project in selected)
+        {
+            if (!string.IsNullOrEmpty(batchTags)) project.Tags = batchTags;
+            if (!string.IsNullOrEmpty(batchProjectTags)) project.ProjectTags = batchProjectTags;
+            if (!string.IsNullOrEmpty(batchProjectGroups)) project.ProjectGroups = batchProjectGroups;
+        }
+
+        SaveProjects();
+
+        if (_selectedProject != null && selected.Contains(_selectedProject))
+            PopulateDetailPanel(_selectedProject);
+
+        AppendToConsole($"[LOTE] Tags aplicadas a {selected.Count} projeto(s).");
+    }
+
+    private void BtnBrowseCli_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = "Executable files (*.exe)|*.exe|All files (*.*)|*.*",
+            Title = "Selecione o executável do Checkmarx One CLI (cx.exe)"
+        };
+        if (dialog.ShowDialog() == true)
+            txtCliPath.Text = dialog.FileName;
+    }
+
+    private async void BtnInstallCli_Click(object sender, RoutedEventArgs e)
+    {
+        string url = "https://github.com/Checkmarx/ast-cli/releases/latest/download/ast-cli_windows_x64.zip";
+        string destFolder = @"C:\Checkmarx";
+        string zipPath = Path.Combine(Path.GetTempPath(), "ast-cli.zip");
+
+        AppendToConsole("Baixando Checkmarx CLI mais recente pelo GitHub...");
+        try
+        {
+            using HttpClient client = new();
+            var response = await client.GetByteArrayAsync(url);
+            File.WriteAllBytes(zipPath, response);
+
+            if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
+            ZipFile.ExtractToDirectory(zipPath, destFolder, true);
+
+            txtCliPath.Text = Path.Combine(destFolder, "cx.exe");
+            AppendToConsole("CLI instalado com sucesso em: " + txtCliPath.Text);
+        }
+        catch (Exception ex)
+        {
+            AppendToConsole("Erro ao instalar CLI: " + ex.Message);
+        }
+    }
+
+    private async void BtnAuth_Click(object sender, RoutedEventArgs e)
+    {
+        string cliPath = txtCliPath.Text;
+        string tenant = txtTenant.Text.Trim();
+        string apiKey = txtApiKey.Password;
+
+        if (!ValidateAuthInputs(cliPath, tenant, apiKey)) return;
+
+        SaveEncryptedApiKey(apiKey);
+        SetAuthStatus("Autenticando...", Brushes.Orange);
+        btnScan.IsEnabled = false;
+
+        AppendToConsole("--- Iniciando Autenticação ---");
+        string args = $"auth validate --tenant \"{tenant}\" --apikey \"{apiKey}\" --base-uri \"{BaseUri}\" --base-auth-uri \"{BaseAuthUri}\"";
+
+        using var cts = new CancellationTokenSource();
+        bool success = await _cliService.RunScanAsync(cliPath, args, null!, apiKey, cts.Token);
+
+        if (success)
+        {
+            SetAuthStatus("Autenticado", Brushes.Green);
+            btnScan.IsEnabled = true;
+            AppendToConsole("Autenticação validada com sucesso.\n");
+        }
+        else
+        {
+            SetAuthStatus("Falha", Brushes.Red);
+            AppendToConsole("Falha na validação de autenticação. Verifique suas credenciais.\n");
+        }
+    }
+
+    private bool ValidateAuthInputs(string cliPath, string tenant, string apiKey)
+    {
+        if (!File.Exists(cliPath))
+        {
+            MessageBox.Show("Caminho do CLI inválido. Verifique se o arquivo cx.exe existe.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey))
+        {
+            MessageBox.Show("Tenant Name e API Key são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private void SetAuthStatus(string text, Brush color)
+    {
+        lblAuthStatus.Text = text;
+        lblAuthStatus.Foreground = color;
+    }
+
+    private async void BtnScan_Click(object sender, RoutedEventArgs e)
+    {
+        string cliPath = txtCliPath.Text;
+        string tenant = txtTenant.Text.Trim();
+        string apiKey = txtApiKey.Password;
+
+        var selectedProjects = SavedProjects.Where(p => p.IsSelected).ToList();
+
+        if (!ValidateScanInputs(cliPath, selectedProjects)) return;
+
+        SetScanRunningState(true);
+        _scanCts = new CancellationTokenSource();
+
+        int projectIndex = 0;
+        foreach (var proj in selectedProjects)
+        {
+            if (_scanCts.Token.IsCancellationRequested) break;
+
+            projectIndex++;
+            AppendToConsole($"\n\n=== [{projectIndex}/{selectedProjects.Count}] Scan: {proj.Name} ===");
+            UpdateProgressLabel($"Escaneando {proj.Name} ({projectIndex}/{selectedProjects.Count})...");
+            progressBar.Value = 0;
+
+            string workingDir = ResolveWorkingDirectory(proj);
+            string reportDir = Path.Combine(workingDir, "CxReports");
+            List<string> scanTypes = BuildScanTypes(proj);
+
+            if (scanTypes.Count == 0)
+            {
+                AppendToConsole($"[AVISO] {proj.Name}: nenhum tipo de scan selecionado, pulando.");
+                continue;
+            }
+
+            string args = CxCliService.BuildScanArguments(
+                proj.Name, proj.Branch, scanTypes,
+                proj.Tags, proj.ProjectTags, proj.ProjectGroups,
+                tenant, apiKey, BaseUri, BaseAuthUri, reportDir);
+
+            bool success = await _cliService.RunScanAsync(cliPath, args, workingDir, apiKey, _scanCts.Token);
+
+            if (_scanCts.Token.IsCancellationRequested)
+            {
+                AppendToConsole("[CANCELADO] Operação cancelada pelo usuário.");
+                break;
+            }
+
+            var result = ProcessScanResult(proj.Name, reportDir, success);
+            ScanResults.Add(result);
+
+            string status = success ? "[SUCESSO]" : "[FALHA]";
+            AppendToConsole($"{status} Scan finalizado para {proj.Name}.\n");
+        }
+
+        SetScanRunningState(false);
+
+        if (ScanResults.Count > 0)
+            mainTabControl.SelectedIndex = 1;
+    }
+
+    private bool ValidateScanInputs(string cliPath, List<ProjectItem> selectedProjects)
+    {
+        if (!File.Exists(cliPath))
+        {
+            MessageBox.Show("Caminho do CLI inválido.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+        if (selectedProjects.Count == 0)
+        {
+            MessageBox.Show("Selecione pelo menos um projeto na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+        return true;
+    }
+
+    private static string ResolveWorkingDirectory(ProjectItem project)
+    {
+        if (!string.IsNullOrWhiteSpace(project.LocalPath) && Directory.Exists(project.LocalPath))
+            return project.LocalPath;
+
+        return Directory.GetCurrentDirectory();
+    }
+
+    private static List<string> BuildScanTypes(ProjectItem project)
+    {
+        var types = new List<string>();
+        if (project.RunSast) types.Add("sast");
+        if (project.RunSca) types.Add("sca");
+        return types;
+    }
+
+    private static ScanResult ProcessScanResult(string projectName, string reportDir, bool scanSuccess)
+    {
+        if (!scanSuccess)
+        {
+            return new ScanResult
+            {
+                ProjectName = projectName,
+                Success = false,
+                StatusMessage = "Scan falhou"
+            };
+        }
+
+        return ReportParserService.ParseReport(reportDir, projectName);
+    }
+
+    private void SetScanRunningState(bool isRunning)
+    {
+        btnScan.IsEnabled = !isRunning;
+        btnCancel.IsEnabled = isRunning;
+        progressBar.Value = isRunning ? 0 : 100;
+        UpdateProgressLabel(isRunning ? "Iniciando..." : "Pronto");
+
+        if (!isRunning)
+        {
+            _scanCts?.Dispose();
+            _scanCts = null;
+        }
+    }
+
+    private void BtnCancel_Click(object sender, RoutedEventArgs e)
+    {
+        _scanCts?.Cancel();
+        _cliService.KillActiveProcess();
+        AppendToConsole("[CANCELADO] Operação de scan cancelada pelo usuário.");
+        SetScanRunningState(false);
+    }
+
+    private void BtnOpenReport_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement element && element.DataContext is ScanResult result)
+        {
+            if (string.IsNullOrEmpty(result.ReportHtmlPath) || !File.Exists(result.ReportHtmlPath))
+            {
+                MessageBox.Show("Arquivo de relatório HTML não encontrado.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = result.ReportHtmlPath,
+                UseShellExecute = true
+            });
+        }
+    }
+
+    private void AppendToConsole(string text)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            txtConsole.AppendText(text + Environment.NewLine);
+            txtConsole.ScrollToEnd();
+        });
+    }
+
+    private void UpdateProgress(int percent)
+    {
+        Dispatcher.Invoke(() =>
+        {
+            progressBar.Value = percent;
+            lblProgress.Text = $"{percent}%";
+        });
+    }
+
+    private void UpdateProgressLabel(string text)
+    {
+        Dispatcher.Invoke(() => { lblProgress.Text = text; });
+    }
+
+    private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        Process.Start(new ProcessStartInfo
+        {
+            FileName = e.Uri.AbsoluteUri,
+            UseShellExecute = true
+        });
+        e.Handled = true;
+    }
+
+    private readonly string KeyFile = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "CxDesktopWrapper", "secure_key.dat");
+
+    private void SaveEncryptedApiKey(string apiKey)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(KeyFile)!);
+            byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
+            byte[] encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+            File.WriteAllBytes(KeyFile, encryptedBytes);
+        }
+        catch (Exception ex)
+        {
+            AppendToConsole("Erro ao salvar a API Key: " + ex.Message);
+        }
+    }
+
+    private string LoadDecryptedApiKey()
+    {
+        if (!File.Exists(KeyFile)) return string.Empty;
+
+        try
+        {
+            byte[] encryptedBytes = File.ReadAllBytes(KeyFile);
+            byte[] plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
+            return Encoding.UTF8.GetString(plainBytes);
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+}
