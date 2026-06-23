@@ -114,11 +114,13 @@ public partial class MainWindow : Window
     }
   }
 
-  private void BtnAddProject_Click(object sender, RoutedEventArgs e)
+  private async void BtnAddProject_Click(object sender, RoutedEventArgs e)
   {
     string newName = txtNewProject.Text.Trim();
     if (string.IsNullOrEmpty(newName)) return;
     if (SavedProjects.Any(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))) return;
+
+    if (!await ValidateProjectExistsAsync(newName)) return;
 
     var settings = AppSettingsService.Instance;
     SavedProjects.Add(new ProjectItem
@@ -145,7 +147,7 @@ public partial class MainWindow : Window
     }
   }
 
-  private void BtnImportSolution_Click(object sender, RoutedEventArgs e)
+  private async void BtnImportSolution_Click(object sender, RoutedEventArgs e)
   {
     var dialog = new OpenFileDialog
     {
@@ -156,11 +158,11 @@ public partial class MainWindow : Window
     if (dialog.ShowDialog() != true) return;
 
     var projects = SolutionParserService.ParseSolution(dialog.FileName);
-    int added = AddProjectsToList(projects);
+    int added = await AddValidatedProjectsToList(projects);
     AppendToConsole($"[IMPORTAÇÃO] {added} projeto(s) importado(s) de: {dialog.FileName}");
   }
 
-  private void BtnScanDirectory_Click(object sender, RoutedEventArgs e)
+  private async void BtnScanDirectory_Click(object sender, RoutedEventArgs e)
   {
     var dialog = new OpenFolderDialog
     {
@@ -170,22 +172,56 @@ public partial class MainWindow : Window
     if (dialog.ShowDialog() != true) return;
 
     var projects = DirectoryScannerService.ScanDirectory(dialog.FolderName);
-    int added = AddProjectsToList(projects);
+    int added = await AddValidatedProjectsToList(projects);
     AppendToConsole($"[SCANNER] {added} projeto(s) encontrado(s) em: {dialog.FolderName}");
   }
 
-  private int AddProjectsToList(List<ProjectItem> projects)
+  private async Task<int> AddValidatedProjectsToList(List<ProjectItem> projects)
   {
     int count = 0;
     foreach (var p in projects)
     {
       if (SavedProjects.Any(existing => existing.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
         continue;
+
+      if (!await ValidateProjectExistsAsync(p.Name))
+        return count;
+
       SavedProjects.Add(p);
       count++;
     }
     if (count > 0) SaveProjects();
     return count;
+  }
+
+  private async Task<bool> ValidateProjectExistsAsync(string projectName)
+  {
+    var settings = AppSettingsService.Instance;
+    string apiKey = LoadDecryptedApiKey();
+
+    if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(settings.Tenant))
+    {
+      MessageBox.Show("API Key e Tenant são obrigatórios. Configure-os na aba Configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+      return false;
+    }
+
+    var apiService = new CheckmarxApiService();
+    var validation = await apiService.ValidateProjectExistsAsync(
+        projectName, settings.Tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
+
+    if (validation.ApiCallFailed)
+    {
+      MessageBox.Show(validation.ApiErrorMessage, "Erro de Validação", MessageBoxButton.OK, MessageBoxImage.Error);
+      return false;
+    }
+
+    if (!validation.ProjectFound)
+    {
+      MessageBox.Show(validation.Message, "Projeto Não Encontrado", MessageBoxButton.OK, MessageBoxImage.Error);
+      return false;
+    }
+
+    return true;
   }
 
   private void DgProjects_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -430,6 +466,36 @@ public partial class MainWindow : Window
     {
       MessageBox.Show("Selecione pelo menos um projeto na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
       return;
+    }
+
+    if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(tenant))
+    {
+      MessageBox.Show("API Key e Tenant são obrigatórios. Configure-os na aba Configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+      return;
+    }
+
+    var apiService = new CheckmarxApiService();
+    foreach (var proj in selectedProjects)
+    {
+      AppendToConsole($"[VALIDAÇÃO] Verificando existência do projeto \"{proj.Name}\"...");
+      var validation = await apiService.ValidateProjectExistsAsync(
+          proj.Name, tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
+
+      if (validation.ApiCallFailed)
+      {
+        AppendToConsole($"[ERRO] {validation.ApiErrorMessage}");
+        MessageBox.Show(validation.ApiErrorMessage, "Erro de Validação", MessageBoxButton.OK, MessageBoxImage.Error);
+        return;
+      }
+
+      if (!validation.ProjectFound)
+      {
+        AppendToConsole($"[ERRO] {validation.Message}");
+        MessageBox.Show(validation.Message, "Projeto Não Encontrado", MessageBoxButton.OK, MessageBoxImage.Error);
+        return;
+      }
+
+      AppendToConsole($"[VALIDAÇÃO] Projeto \"{proj.Name}\" encontrado (ID: {validation.ProjectId}).");
     }
 
     SetScanRunningState(true);
