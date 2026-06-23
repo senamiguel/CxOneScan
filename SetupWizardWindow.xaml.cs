@@ -211,8 +211,16 @@ public partial class SetupWizardWindow : Window
         {
             Directory.CreateDirectory(System.IO.Path.GetDirectoryName(KeyFile)!);
             byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
-            byte[] encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-            File.WriteAllBytes(KeyFile, encryptedBytes);
+            byte[] dataToWrite;
+            try
+            {
+                dataToWrite = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+            }
+            catch (PlatformNotSupportedException)
+            {
+                dataToWrite = Encoding.UTF8.GetBytes("FALLBACK:" + Convert.ToBase64String(plainBytes));
+            }
+            File.WriteAllBytes(KeyFile, dataToWrite);
         }
         catch
         {

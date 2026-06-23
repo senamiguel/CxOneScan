@@ -78,6 +78,7 @@ public partial class MainWindow : Window
     txtSettingDefaultBranch.Text = settings.DefaultBranch;
     chkSettingDefaultSast.IsChecked = settings.DefaultRunSast;
     chkSettingDefaultSca.IsChecked = settings.DefaultRunSca;
+    chkSettingBypassValidation.IsChecked = settings.BypassApiValidation;
 
     cmbSettingTheme.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
     ApplyTheme(settings.Theme);
@@ -197,6 +198,12 @@ public partial class MainWindow : Window
   private async Task<bool> ValidateProjectExistsAsync(string projectName)
   {
     var settings = AppSettingsService.Instance;
+
+    if (settings.BypassApiValidation)
+    {
+      return true;
+    }
+
     string apiKey = LoadDecryptedApiKey();
 
     if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(settings.Tenant))
@@ -211,14 +218,24 @@ public partial class MainWindow : Window
 
     if (validation.ApiCallFailed)
     {
-      MessageBox.Show(validation.ApiErrorMessage, "Erro de Validação", MessageBoxButton.OK, MessageBoxImage.Error);
-      return false;
+      var result = MessageBox.Show(
+          $"{validation.ApiErrorMessage}\n\nDeseja ignorar esta validação de API e adicionar/importar o projeto mesmo assim?",
+          "Erro de Validação (API)",
+          MessageBoxButton.YesNo,
+          MessageBoxImage.Warning);
+          
+      return result == MessageBoxResult.Yes;
     }
 
     if (!validation.ProjectFound)
     {
-      MessageBox.Show(validation.Message, "Projeto Não Encontrado", MessageBoxButton.OK, MessageBoxImage.Error);
-      return false;
+      var result = MessageBox.Show(
+          $"{validation.Message}\n\nDeseja adicionar/importar o projeto mesmo assim? (Nota: Ao escanear, se o projeto não existir, ele será criado no Checkmarx One)",
+          "Projeto Não Encontrado",
+          MessageBoxButton.YesNo,
+          MessageBoxImage.Warning);
+
+      return result == MessageBoxResult.Yes;
     }
 
     return true;
@@ -427,6 +444,7 @@ public partial class MainWindow : Window
     settings.DefaultBranch = txtSettingDefaultBranch.Text.Trim();
     settings.DefaultRunSast = chkSettingDefaultSast.IsChecked == true;
     settings.DefaultRunSca = chkSettingDefaultSca.IsChecked == true;
+    settings.BypassApiValidation = chkSettingBypassValidation.IsChecked == true;
     settings.Theme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
 
     if (!string.IsNullOrEmpty(txtSettingApiKey.Password))
@@ -477,6 +495,12 @@ public partial class MainWindow : Window
     var apiService = new CheckmarxApiService();
     foreach (var proj in selectedProjects)
     {
+      if (settings.BypassApiValidation)
+      {
+        AppendToConsole($"[VALIDAÇÃO] Validação via API para o projeto \"{proj.Name}\" ignorada (configuração ativa).");
+        continue;
+      }
+
       AppendToConsole($"[VALIDAÇÃO] Verificando existência do projeto \"{proj.Name}\"...");
       var validation = await apiService.ValidateProjectExistsAsync(
           proj.Name, tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
@@ -484,18 +508,37 @@ public partial class MainWindow : Window
       if (validation.ApiCallFailed)
       {
         AppendToConsole($"[ERRO] {validation.ApiErrorMessage}");
-        MessageBox.Show(validation.ApiErrorMessage, "Erro de Validação", MessageBoxButton.OK, MessageBoxImage.Error);
-        return;
-      }
+        var result = MessageBox.Show(
+            $"{validation.ApiErrorMessage}\n\nDeseja ignorar este erro de validação via API e prosseguir com o scan mesmo assim?",
+            "Erro de Validação (API)",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
 
-      if (!validation.ProjectFound)
+        if (result != MessageBoxResult.Yes)
+        {
+          return;
+        }
+        AppendToConsole("[VALIDAÇÃO] Erro de validação ignorado pelo usuário.");
+      }
+      else if (!validation.ProjectFound)
       {
         AppendToConsole($"[ERRO] {validation.Message}");
-        MessageBox.Show(validation.Message, "Projeto Não Encontrado", MessageBoxButton.OK, MessageBoxImage.Error);
-        return;
-      }
+        var result = MessageBox.Show(
+            $"{validation.Message}\n\nDeseja prosseguir com o scan mesmo assim? (Nota: Se o projeto não existir, ele será criado no Checkmarx One)",
+            "Projeto Não Encontrado",
+            MessageBoxButton.YesNo,
+            MessageBoxImage.Warning);
 
-      AppendToConsole($"[VALIDAÇÃO] Projeto \"{proj.Name}\" encontrado (ID: {validation.ProjectId}).");
+        if (result != MessageBoxResult.Yes)
+        {
+          return;
+        }
+        AppendToConsole("[VALIDAÇÃO] Validação ignorada (projeto não encontrado).");
+      }
+      else
+      {
+        AppendToConsole($"[VALIDAÇÃO] Projeto \"{proj.Name}\" encontrado (ID: {validation.ProjectId}).");
+      }
     }
 
     SetScanRunningState(true);
@@ -674,8 +717,16 @@ public partial class MainWindow : Window
     {
       Directory.CreateDirectory(Path.GetDirectoryName(KeyFile)!);
       byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
-      byte[] encryptedBytes = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-      File.WriteAllBytes(KeyFile, encryptedBytes);
+      byte[] dataToWrite;
+      try
+      {
+        dataToWrite = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
+      }
+      catch (PlatformNotSupportedException)
+      {
+        dataToWrite = Encoding.UTF8.GetBytes("FALLBACK:" + Convert.ToBase64String(plainBytes));
+      }
+      File.WriteAllBytes(KeyFile, dataToWrite);
     }
     catch (Exception ex)
     {
@@ -689,9 +740,22 @@ public partial class MainWindow : Window
 
     try
     {
-      byte[] encryptedBytes = File.ReadAllBytes(KeyFile);
-      byte[] plainBytes = ProtectedData.Unprotect(encryptedBytes, null, DataProtectionScope.CurrentUser);
-      return Encoding.UTF8.GetString(plainBytes);
+      byte[] bytes = File.ReadAllBytes(KeyFile);
+      try
+      {
+        byte[] plainBytes = ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
+        return Encoding.UTF8.GetString(plainBytes);
+      }
+      catch (PlatformNotSupportedException)
+      {
+        string text = Encoding.UTF8.GetString(bytes);
+        if (text.StartsWith("FALLBACK:"))
+        {
+          byte[] plainBytes = Convert.FromBase64String(text.Substring(9));
+          return Encoding.UTF8.GetString(plainBytes);
+        }
+        return string.Empty;
+      }
     }
     catch
     {

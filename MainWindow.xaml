@@ -297,6 +297,7 @@
                   <Grid.RowDefinitions>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                   </Grid.RowDefinitions>
                   <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="150"/>
@@ -311,6 +312,9 @@
                     <CheckBox x:Name="chkSettingDefaultSast" Content="SAST" FontSize="13" Margin="0,0,20,0"/>
                     <CheckBox x:Name="chkSettingDefaultSca" Content="SCA" FontSize="13"/>
                   </StackPanel>
+
+                  <TextBlock Grid.Row="2" Text="Validação API:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <CheckBox x:Name="chkSettingBypassValidation" Content="Pular validação de projetos via API (evita erros 401/conexão)" Grid.Row="2" Grid.Column="1" FontSize="13" Margin="0,0,0,10" VerticalAlignment="Center"/>
                 </Grid>
               </StackPanel>
             </Border>

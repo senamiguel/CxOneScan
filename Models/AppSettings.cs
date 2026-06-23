@@ -11,4 +11,5 @@ public class AppSettings
     public bool DefaultRunSca { get; set; } = false;
     public string Theme { get; set; } = "Dark";
     public bool IsFirstRunCompleted { get; set; } = false;
+    public bool BypassApiValidation { get; set; } = false;
 }
