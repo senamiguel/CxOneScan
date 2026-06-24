@@ -14,6 +14,7 @@ public class ProjectItem : INotifyPropertyChanged
     private string _projectGroups = string.Empty;
     private bool _runSast = true;
     private bool _runSca;
+    private bool _incremental;
 
     public string Name
     {
@@ -67,6 +68,12 @@ public class ProjectItem : INotifyPropertyChanged
     {
         get => _runSca;
         set => SetField(ref _runSca, value);
+    }
+
+    public bool Incremental
+    {
+        get => _incremental;
+        set => SetField(ref _incremental, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;

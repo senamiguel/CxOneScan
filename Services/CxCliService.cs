@@ -4,7 +4,7 @@ using System.Text.RegularExpressions;
 
 namespace CxDesktopWrapper.Services;
 
-public partial class CxCliService
+public class CxCliService
 {
     private Process? _activeProcess;
     private readonly object _processLock = new();
@@ -12,8 +12,7 @@ public partial class CxCliService
     public event Action<string>? OutputReceived;
     public event Action<int>? ProgressChanged;
 
-    [GeneratedRegex(@"(\d{1,3})%", RegexOptions.Compiled)]
-    private static partial Regex PercentPattern();
+    private static readonly Regex PercentRegex = new(@"(\d{1,3})%", RegexOptions.Compiled);
 
     public bool HasActiveProcess
     {
@@ -120,7 +119,7 @@ public partial class CxCliService
         string safeData = MaskSensitiveData(data, sensitiveKey);
         RaiseOutput(isError ? $"ERROR: {safeData}" : safeData);
 
-        var match = PercentPattern().Match(data);
+        var match = PercentRegex.Match(data);
         if (match.Success && int.TryParse(match.Groups[1].Value, out int percent))
         {
             ProgressChanged?.Invoke(Math.Clamp(percent, 0, 100));
@@ -148,12 +147,16 @@ public partial class CxCliService
         string apiKey,
         string baseUri,
         string baseAuthUri,
-        string reportOutputPath)
+        string reportOutputPath,
+        bool incremental = false)
     {
         var args = new StringBuilder();
         args.Append($"scan create --project-name \"{projectName}\"");
         args.Append($" --branch \"{branch}\"");
         args.Append($" --scan-types \"{string.Join(",", scanTypes)}\"");
+
+        if (incremental)
+            args.Append(" --incremental");
 
         if (!string.IsNullOrWhiteSpace(tags))
             args.Append($" --tags \"{tags}\"");

@@ -28,6 +28,7 @@ public static class DirectoryScannerService
             Branch = settings.DefaultBranch,
             RunSast = settings.DefaultRunSast,
             RunSca = settings.DefaultRunSca,
+            Incremental = settings.DefaultIncremental,
             Tags = string.Empty,
             ProjectTags = string.Empty,
             ProjectGroups = string.Empty

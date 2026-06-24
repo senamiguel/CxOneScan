@@ -78,6 +78,7 @@ public partial class MainWindow : Window
     txtSettingDefaultBranch.Text = settings.DefaultBranch;
     chkSettingDefaultSast.IsChecked = settings.DefaultRunSast;
     chkSettingDefaultSca.IsChecked = settings.DefaultRunSca;
+    chkSettingDefaultIncremental.IsChecked = settings.DefaultIncremental;
     chkSettingBypassValidation.IsChecked = settings.BypassApiValidation;
 
     cmbSettingTheme.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
@@ -130,7 +131,8 @@ public partial class MainWindow : Window
       IsSelected = true,
       Branch = settings.DefaultBranch,
       RunSast = settings.DefaultRunSast,
-      RunSca = settings.DefaultRunSca
+      RunSca = settings.DefaultRunSca,
+      Incremental = settings.DefaultIncremental
     });
 
     SaveProjects();
@@ -264,6 +266,7 @@ public partial class MainWindow : Window
     txtDetailProjectGroups.Text = project.ProjectGroups;
     chkDetailSast.IsChecked = project.RunSast;
     chkDetailSca.IsChecked = project.RunSca;
+    chkDetailIncremental.IsChecked = project.Incremental;
 
     _isUpdatingDetail = false;
   }
@@ -283,6 +286,7 @@ public partial class MainWindow : Window
     txtDetailProjectGroups.Text = "";
     chkDetailSast.IsChecked = false;
     chkDetailSca.IsChecked = false;
+    chkDetailIncremental.IsChecked = false;
 
     _isUpdatingDetail = false;
   }
@@ -305,6 +309,7 @@ public partial class MainWindow : Window
 
     _selectedProject.RunSast = chkDetailSast.IsChecked == true;
     _selectedProject.RunSca = chkDetailSca.IsChecked == true;
+    _selectedProject.Incremental = chkDetailIncremental.IsChecked == true;
     SaveProjects();
   }
 
@@ -444,6 +449,7 @@ public partial class MainWindow : Window
     settings.DefaultBranch = txtSettingDefaultBranch.Text.Trim();
     settings.DefaultRunSast = chkSettingDefaultSast.IsChecked == true;
     settings.DefaultRunSca = chkSettingDefaultSca.IsChecked == true;
+    settings.DefaultIncremental = chkSettingDefaultIncremental.IsChecked == true;
     settings.BypassApiValidation = chkSettingBypassValidation.IsChecked == true;
     settings.Theme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
 
@@ -580,7 +586,8 @@ public partial class MainWindow : Window
       string args = CxCliService.BuildScanArguments(
           proj.Name, proj.Branch, scanTypes,
           proj.Tags, proj.ProjectTags, proj.ProjectGroups,
-          tenant, apiKey, settings.BaseUri, settings.BaseAuthUri, reportDir);
+          tenant, apiKey, settings.BaseUri, settings.BaseAuthUri, reportDir,
+          proj.Incremental);
 
       bool success = await _cliService.RunScanAsync(cliPath, args, workingDir, apiKey, _scanCts.Token);
 
