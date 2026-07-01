@@ -9,6 +9,8 @@ public class ScanResult
     public int InfoCount { get; set; }
     public string ReportJsonPath { get; set; } = string.Empty;
     public string ReportHtmlPath { get; set; } = string.Empty;
+    public string SarifFilePath { get; set; } = string.Empty;
+    public string ProjectLocalPath { get; set; } = string.Empty;
     public DateTime ScanDate { get; set; } = DateTime.Now;
     public bool Success { get; set; }
     public string StatusMessage { get; set; } = string.Empty;
