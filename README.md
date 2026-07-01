@@ -4,14 +4,16 @@ A modern WPF desktop application for managing and running [Checkmarx One](https:
 
 ## Features
 
-- **Multi-Project Batch Scanning** — Import projects from `.sln` files, scan directories for `.csproj`, or add manually. Run SAST and SCA scans across all selected projects in one click.
-- **Per-Project Configuration** — Each project gets its own branch, tags, project tags, project groups, and scan type settings.
-- **Batch Tag Operations** — Apply tags, project tags, and project groups to multiple selected projects at once.
-- **Results Dashboard** — View scan results with severity breakdown (High, Medium, Low, Info) and open HTML reports directly.
-- **Built-in CLI Installer** — Download and install the latest Checkmarx AST CLI directly from GitHub releases.
-- **Encrypted API Key Storage** — API keys are encrypted using Windows DPAPI (per-user scope) and stored securely.
-- **Progress Tracking & Cancellation** — Real-time console output, progress bar, and the ability to cancel running scans.
-- **Modern Dark UI** — Built with [iNKORE.UI.WPF.Modern](https://github.com/iNKORE-Inc/UI.WPF.Modern) for a Fluent Design experience.
+- **Multi-Project Scanning** — Import projects from directories, or add manually. Run SAST/SCA scans across selected projects.
+- **Per-Project Configuration** — Each project gets its own branch, tags, project groups, and scan type settings.
+- **Incremental Scanning** — Supports incremental scans with baseline verification. Confirms before full scans.
+- **Copilot Integration** — Parse SARIF reports and generate detailed prompts for GitHub Copilot with severity filters and auto-open in Visual Studio.
+- **Results Dashboard** — View scan results with severity breakdown (Critical, High, Medium, Low, Info) and open HTML reports.
+- **Built-in CLI Installer** — Download and install the latest Checkmarx AST CLI directly from GitHub releases with Zip Slip protection.
+- **Encrypted Credentials** — API keys encrypted using Windows DPAPI with in-memory cache.
+- **Session Authentication** — KeepLoggedIn option with automatic re-authentication on startup.
+- **Progress Tracking & Cancellation** — Real-time console output, progress bar, and cancellation support.
+- **Fluent Design UI** — Dark/Light themes built with [iNKORE.UI.WPF.Modern](https://github.com/iNKORE-Inc/UI.WPF.Modern).
 
 ## Requirements
 
@@ -26,27 +28,49 @@ dotnet build
 dotnet run
 ```
 
-To publish as a single-file executable:
+To publish:
 
 ```bash
-dotnet publish -c Release -r win-x64 --self-contained
+dotnet publish -c Release -r win-x64 --self-contained false
 ```
+
+## Installer
+
+An Inno Setup script is available at `installer/CxOneScan.iss`. Compile with:
+
+```bash
+iscc installer/CxOneScan.iss
+```
+
+Output goes to `installer/output/CxOneScanSetup.exe`.
 
 ## Project Structure
 
 ```
-├── MainWindow.xaml          # UI layout (WPF XAML)
-├── MainWindow.xaml.cs       # UI logic and event handlers
-├── App.xaml                 # Application entry point
+├── MainWindow.xaml / .cs       # Main UI and logic
+├── SetupWizardWindow.xaml / .cs # First-run setup wizard
+├── CopilotFilterWindow.xaml / .cs # SARIF vulnerability filter
+├── App.xaml                     # Application entry point
+├── Common/
+│   └── AppConstants.cs          # Centralized constants
+├── Converters/
+│   └── StringToVisibilityConverter.cs
 ├── Models/
-│   ├── ProjectItem.cs       # Project data model with INotifyPropertyChanged
-│   └── ScanResult.cs        # Scan result data model
+│   ├── AppSettings.cs           # Observable settings with INotifyPropertyChanged
+│   ├── ProjectItem.cs           # Project data model
+│   ├── ScanResult.cs            # Observable scan result with INotifyPropertyChanged
+│   └── VulnerabilityItem.cs     # SARIF vulnerability model
 ├── Services/
-│   ├── CxCliService.cs      # CLI process execution with cancellation support
-│   ├── ProjectPersistenceService.cs  # JSON-based project persistence
-│   ├── ReportParserService.cs        # Checkmarx report JSON parser
-│   ├── SolutionParserService.cs      # .sln file parser for project import
-│   └── DirectoryScannerService.cs    # Directory scanner for .csproj files
+│   ├── AppSettingsService.cs    # Settings persistence
+│   ├── CheckmarxApiService.cs   # REST API client (OAuth2 refresh_token)
+│   ├── CliInstallerService.cs   # CLI download and extraction
+│   ├── CredentialService.cs     # DPAPI credential storage
+│   ├── CxCliService.cs          # CLI process execution with GeneratedRegex
+│   ├── DirectoryScannerService.cs  # Project discovery
+│   ├── ProjectPersistenceService.cs  # JSON persistence
+│   └── ReportParserService.cs   # Report parsing (JSON, SARIF)
+└── installer/
+    └── CxOneScan.iss            # Inno Setup installer script
 ```
 
 ## License
