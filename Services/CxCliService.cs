@@ -1,85 +1,75 @@
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace CxDesktopWrapper.Services;
 
-public class CxCliService
+public partial class CxCliService
 {
-    private Process? _activeProcess;
-    private readonly object _processLock = new();
-
     public event Action<string>? OutputReceived;
     public event Action<int>? ProgressChanged;
 
-    private static readonly Regex PercentRegex = new(@"(\d{1,3})%", RegexOptions.Compiled);
-
-    public bool HasActiveProcess
-    {
-        get
-        {
-            lock (_processLock)
-            {
-                return _activeProcess != null && !_activeProcess.HasExited;
-            }
-        }
-    }
-
-    public void KillActiveProcess()
-    {
-        lock (_processLock)
-        {
-            if (_activeProcess == null || _activeProcess.HasExited) return;
-
-            try
-            {
-                _activeProcess.Kill(entireProcessTree: true);
-                RaiseOutput("[CANCELADO] Processo encerrado pelo usuário.");
-            }
-            catch (Exception ex)
-            {
-                RaiseOutput($"[ERRO] Falha ao cancelar processo: {ex.Message}");
-            }
-        }
-    }
+    private readonly object _processLock = new();
+    private Process? _activeProcess;
 
     public Task<bool> RunScanAsync(
         string executable,
-        string arguments,
+        IEnumerable<string> arguments,
         string workingDirectory,
-        string sensitiveKeyToMask,
+        Dictionary<string, string>? envVars,
         CancellationToken cancellationToken)
     {
-        return Task.Run(() => ExecuteProcess(executable, arguments, workingDirectory, sensitiveKeyToMask, cancellationToken), cancellationToken);
+        return Task.Factory.StartNew(
+            () => ExecuteProcess(executable, arguments, workingDirectory, envVars, cancellationToken),
+            cancellationToken,
+            TaskCreationOptions.LongRunning,
+            TaskScheduler.Default);
     }
 
     private bool ExecuteProcess(
         string executable,
-        string arguments,
+        IEnumerable<string> arguments,
         string workingDirectory,
-        string sensitiveKeyToMask,
+        Dictionary<string, string>? envVars,
         CancellationToken cancellationToken)
     {
         var process = new Process();
         process.StartInfo.FileName = executable;
-        process.StartInfo.Arguments = arguments;
         process.StartInfo.UseShellExecute = false;
         process.StartInfo.RedirectStandardOutput = true;
         process.StartInfo.RedirectStandardError = true;
         process.StartInfo.CreateNoWindow = true;
 
-        if (!string.IsNullOrEmpty(workingDirectory))
-            process.StartInfo.WorkingDirectory = workingDirectory;
+        foreach (var arg in arguments)
+        {
+            process.StartInfo.ArgumentList.Add(arg);
+        }
 
-        process.OutputDataReceived += (_, ev) => HandleOutputLine(ev.Data, sensitiveKeyToMask, isError: false);
-        process.ErrorDataReceived += (_, ev) => HandleOutputLine(ev.Data, sensitiveKeyToMask, isError: true);
+        if (envVars != null)
+        {
+            foreach (var kvp in envVars)
+            {
+                process.StartInfo.EnvironmentVariables[kvp.Key] = kvp.Value;
+            }
+        }
+
+        string workDir = string.IsNullOrEmpty(workingDirectory) ? AppDomain.CurrentDomain.BaseDirectory : workingDirectory;
+        process.StartInfo.WorkingDirectory = workDir;
+
+        process.OutputDataReceived += (_, ev) => HandleOutputLine(ev.Data, isError: false);
+        process.ErrorDataReceived += (_, ev) => HandleOutputLine(ev.Data, isError: true);
 
         try
         {
             lock (_processLock) { _activeProcess = process; }
 
-            string safeArgs = MaskSensitiveData(arguments, sensitiveKeyToMask);
-            RaiseOutput($"> {executable} {safeArgs}");
+            var safeCmd = $"{executable} {string.Join(" ", arguments.Select(EscapeArgument))}";
+            RaiseOutput($"> {safeCmd}");
 
             process.Start();
             process.BeginOutputReadLine();
@@ -112,23 +102,36 @@ public class CxCliService
         }
     }
 
-    private void HandleOutputLine(string? data, string sensitiveKey, bool isError)
+    public void KillActiveProcess()
+    {
+        lock (_processLock)
+        {
+            if (_activeProcess == null) return;
+            try
+            {
+                if (!_activeProcess.HasExited)
+                {
+                    _activeProcess.Kill(entireProcessTree: true);
+                }
+            }
+            catch (Exception ex)
+            {
+                RaiseOutput($"Erro ao finalizar o processo do CLI: {ex.Message}");
+            }
+        }
+    }
+
+    private void HandleOutputLine(string? data, bool isError)
     {
         if (data == null) return;
 
-        string safeData = MaskSensitiveData(data, sensitiveKey);
-        RaiseOutput(isError ? $"ERROR: {safeData}" : safeData);
+        RaiseOutput(isError ? $"ERROR: {data}" : data);
 
-        var match = PercentRegex.Match(data);
+        var match = PercentPattern().Match(data);
         if (match.Success && int.TryParse(match.Groups[1].Value, out int percent))
         {
             ProgressChanged?.Invoke(Math.Clamp(percent, 0, 100));
         }
-    }
-
-    private static string MaskSensitiveData(string text, string sensitiveKey)
-    {
-        return string.IsNullOrEmpty(sensitiveKey) ? text : text.Replace(sensitiveKey, "********");
     }
 
     private void RaiseOutput(string message)
@@ -136,44 +139,68 @@ public class CxCliService
         OutputReceived?.Invoke(message);
     }
 
-    public static string BuildScanArguments(
+    private static string EscapeArgument(string arg)
+    {
+        if (string.IsNullOrEmpty(arg)) return "\"\"";
+        if (arg.Contains(" ") || arg.Contains("\""))
+        {
+            return "\"" + arg.Replace("\"", "\\\"") + "\"";
+        }
+        return arg;
+    }
+
+    public static List<string> BuildScanArguments(
         string projectName,
         string branch,
         IEnumerable<string> scanTypes,
         string tags,
         string projectTags,
         string projectGroups,
-        string tenant,
-        string apiKey,
-        string baseUri,
-        string baseAuthUri,
         string reportOutputPath,
-        bool incremental = false)
+        bool incremental)
     {
-        var args = new StringBuilder();
-        args.Append($"scan create --project-name \"{projectName}\"");
-        args.Append($" --branch \"{branch}\"");
-        args.Append($" --scan-types \"{string.Join(",", scanTypes)}\"");
+        var args = new List<string>
+        {
+            "scan",
+            "create",
+            "--project-name", projectName,
+            "--branch", branch,
+            "--scan-types", string.Join(",", scanTypes)
+        };
 
         if (incremental)
-            args.Append(" --incremental");
+        {
+            args.Add("--sast-incremental");
+        }
 
         if (!string.IsNullOrWhiteSpace(tags))
-            args.Append($" --tags \"{tags}\"");
+        {
+            args.Add("--tags");
+            args.Add(tags);
+        }
         if (!string.IsNullOrWhiteSpace(projectTags))
-            args.Append($" --project-tags \"{projectTags}\"");
+        {
+            args.Add("--project-tags");
+            args.Add(projectTags);
+        }
         if (!string.IsNullOrWhiteSpace(projectGroups))
-            args.Append($" --project-groups \"{projectGroups}\"");
+        {
+            args.Add("--project-groups");
+            args.Add(projectGroups);
+        }
 
-        args.Append($" --report-format json,summaryHTML");
-        args.Append($" --output-path \"{reportOutputPath}\"");
+        args.Add("--report-format");
+        args.Add("json,summaryHTML");
 
-        args.Append($" --tenant \"{tenant}\"");
-        args.Append($" --apikey \"{apiKey}\"");
-        args.Append($" --base-uri \"{baseUri}\"");
-        args.Append($" --base-auth-uri \"{baseAuthUri}\"");
-        args.Append(" -s .");
+        args.Add("--output-path");
+        args.Add(reportOutputPath);
 
-        return args.ToString();
+        args.Add("-s");
+        args.Add(".");
+
+        return args;
     }
+
+    [GeneratedRegex(@"(\d+)%")]
+    private static partial Regex PercentPattern();
 }
