@@ -1,6 +1,6 @@
 [Setup]
 AppName=CxOneScan
-AppVersion=1.0.0
+AppVersion=2.0.0
 AppPublisher=CxOneScan Contributors
 DefaultDirName={userpf}\CxOneScan
 DefaultGroupName=CxOneScan

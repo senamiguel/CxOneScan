@@ -7,3 +7,4 @@ obj/
 *.DotSettings.user
 *.json
 !*.csproj
+installer/output/
