@@ -13,6 +13,8 @@ public class ScanResult : INotifyPropertyChanged
     private int _infoCount;
     private string _reportJsonPath = string.Empty;
     private string _reportHtmlPath = string.Empty;
+    private string _sarifFilePath = string.Empty;
+    private string _projectLocalPath = string.Empty;
     private DateTime _scanDate = DateTime.Now;
     private bool _success;
     private string _statusMessage = string.Empty;
@@ -57,6 +59,18 @@ public class ScanResult : INotifyPropertyChanged
     {
         get => _reportHtmlPath;
         set => SetProperty(ref _reportHtmlPath, value);
+    }
+
+    public string SarifFilePath
+    {
+        get => _sarifFilePath;
+        set => SetProperty(ref _sarifFilePath, value);
+    }
+
+    public string ProjectLocalPath
+    {
+        get => _projectLocalPath;
+        set => SetProperty(ref _projectLocalPath, value);
     }
 
     public DateTime ScanDate

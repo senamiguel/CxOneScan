@@ -190,7 +190,10 @@ public partial class CxCliService
         }
 
         args.Add("--report-format");
-        args.Add("json,summaryHTML");
+        args.Add("json,summaryHTML,sarif");
+
+        args.Add("--output-name");
+        args.Add(projectName);
 
         args.Add("--output-path");
         args.Add(reportOutputPath);

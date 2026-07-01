@@ -27,11 +27,15 @@ public static class ReportParserService
                                     .FirstOrDefault();
         string? htmlPath = allFiles.Where(f => f.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
                                     .FirstOrDefault();
+        string? sarifPath = allFiles.Where(f => f.EndsWith(".sarif", StringComparison.OrdinalIgnoreCase))
+                                    .FirstOrDefault();
 
         if (jsonPath != null)
             result.ReportJsonPath = jsonPath;
         if (htmlPath != null)
             result.ReportHtmlPath = htmlPath;
+        if (sarifPath != null)
+            result.SarifFilePath = sarifPath;
 
         if (jsonPath == null)
         {

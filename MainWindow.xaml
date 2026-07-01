@@ -212,14 +212,21 @@
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="" Width="160">
+              <DataGridTemplateColumn Header="Ações" Width="280">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <Button Content="📄 Abrir Relatório" Click="BtnOpenReport_Click"
-                            Padding="6,3" Cursor="Hand" FontSize="11"
-                            Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}, FallbackValue=Collapsed, TargetNullValue=Collapsed}"
-                            Style="{DynamicResource AccentButtonStyle}"
-                            ToolTip="Abre o relatório detalhado em HTML no navegador"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                      <Button Content="📄 Abrir Relatório" Click="BtnOpenReport_Click"
+                              Padding="6,3" Cursor="Hand" FontSize="11" Margin="0,0,5,0"
+                              Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}, FallbackValue=Collapsed, TargetNullValue=Collapsed}"
+                              Style="{DynamicResource AccentButtonStyle}"
+                              ToolTip="Abre o relatório detalhado em HTML no navegador"/>
+                      <Button Content="🤖 Analisar com Copilot" Click="BtnAnalyzeCopilot_Click"
+                              Padding="6,3" Cursor="Hand" FontSize="11"
+                              Visibility="{Binding SarifFilePath, Converter={StaticResource StringToVisibilityConverter}, FallbackValue=Collapsed, TargetNullValue=Collapsed}"
+                              Style="{DynamicResource AccentButtonStyle}"
+                              ToolTip="Filtra vulnerabilidades do SARIF e copia prompt para o Copilot"/>
+                    </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
