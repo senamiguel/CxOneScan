@@ -29,9 +29,9 @@ public static class DirectoryScannerService
             RunSast = settings.DefaultRunSast,
             RunSca = settings.DefaultRunSca,
             Incremental = settings.DefaultIncremental,
-            Tags = string.Empty,
-            ProjectTags = string.Empty,
-            ProjectGroups = string.Empty
+            Tags = settings.DefaultTags,
+            ProjectTags = settings.DefaultProjectTags,
+            ProjectGroups = settings.DefaultProjectGroups
         });
 
         return result;

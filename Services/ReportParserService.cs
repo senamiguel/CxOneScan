@@ -1,4 +1,6 @@
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.Json;
 using CxDesktopWrapper.Models;
 
@@ -19,8 +21,12 @@ public static class ReportParserService
         if (!Directory.Exists(reportDirectory))
             return result;
 
-        string? jsonPath = FindMostRecentFile(reportDirectory, "*.json");
-        string? htmlPath = FindMostRecentFile(reportDirectory, "*.html");
+        // Lê o diretório uma única vez e filtra por extensão — evita duas chamadas ao SO
+        var allFiles = GetDirectoryFiles(reportDirectory);
+        string? jsonPath = allFiles.Where(f => f.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                                    .FirstOrDefault();
+        string? htmlPath = allFiles.Where(f => f.EndsWith(".html", StringComparison.OrdinalIgnoreCase))
+                                    .FirstOrDefault();
 
         if (jsonPath != null)
             result.ReportJsonPath = jsonPath;
@@ -135,17 +141,23 @@ public static class ReportParserService
         }
     }
 
-    private static string? FindMostRecentFile(string directory, string pattern)
+    /// <summary>
+    /// Lê o diretório uma única vez e retorna todos os arquivos ordenados do mais recente ao mais antigo.
+    /// Evita múltiplas chamadas ao sistema de arquivos para padrões diferentes.
+    /// </summary>
+    private static IEnumerable<string> GetDirectoryFiles(string directory)
     {
         try
         {
-            return Directory.EnumerateFiles(directory, pattern)
-                .OrderByDescending(File.GetLastWriteTimeUtc)
-                .FirstOrDefault();
+            return new DirectoryInfo(directory)
+                .GetFiles("*")
+                .OrderByDescending(f => f.LastWriteTimeUtc)
+                .Select(f => f.FullName);
         }
-        catch
+        catch (Exception ex)
         {
-            return null;
+            System.Diagnostics.Debug.WriteLine("Erro ao enumerar diretório de relatórios: " + ex.Message);
+            return Enumerable.Empty<string>();
         }
     }
 }

@@ -42,8 +42,9 @@ public static class AppSettingsService
             string json = File.ReadAllText(ConfigFilePath);
             return JsonSerializer.Deserialize<AppSettings>(json, JsonOptions) ?? new AppSettings();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("Erro ao carregar configurações: " + ex.Message);
             return new AppSettings();
         }
     }
@@ -63,8 +64,9 @@ public static class AppSettingsService
             File.WriteAllText(ConfigFilePath, json);
             _instance = settings;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("Erro ao salvar configurações: " + ex.Message);
         }
     }
 }
