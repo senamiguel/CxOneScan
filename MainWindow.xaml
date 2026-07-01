@@ -203,13 +203,19 @@
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTextColumn Header="Status" Binding="{Binding StatusMessage}" Width="*"/>
-              <DataGridTemplateColumn Header="" Width="160">
+              <DataGridTemplateColumn Header="Ações" Width="280">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <Button Content="📄 Abrir Relatório" Click="BtnOpenReport_Click"
-                            Padding="6,3" Cursor="Hand" FontSize="11"
-                            Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}}"
-                            Style="{DynamicResource AccentButtonStyle}"/>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                      <Button Content="📄 Abrir Relatório" Click="BtnOpenReport_Click"
+                              Padding="6,3" Cursor="Hand" FontSize="11" Margin="0,0,5,0"
+                              Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}}"
+                              Style="{DynamicResource AccentButtonStyle}"/>
+                      <Button Content="🤖 Analisar com Copilot" Click="BtnAnalyzeCopilot_Click"
+                              Padding="6,3" Cursor="Hand" FontSize="11"
+                              Visibility="{Binding SarifFilePath, Converter={StaticResource StringToVisibilityConverter}}"
+                              Style="{DynamicResource AccentButtonStyle}"/>
+                    </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>

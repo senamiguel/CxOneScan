@@ -21,11 +21,14 @@ public static class ReportParserService
 
         string? jsonPath = FindMostRecentFile(reportDirectory, "*.json");
         string? htmlPath = FindMostRecentFile(reportDirectory, "*.html");
+        string? sarifPath = FindMostRecentFile(reportDirectory, "*.sarif");
 
         if (jsonPath != null)
             result.ReportJsonPath = jsonPath;
         if (htmlPath != null)
             result.ReportHtmlPath = htmlPath;
+        if (sarifPath != null)
+            result.SarifFilePath = sarifPath;
 
         if (jsonPath == null)
         {

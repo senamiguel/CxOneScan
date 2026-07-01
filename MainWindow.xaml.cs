@@ -12,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Media;
 using CxDesktopWrapper.Models;
 using CxDesktopWrapper.Services;
+using System.Text.Json;
 
 namespace CxDesktopWrapper;
 
@@ -598,6 +599,7 @@ public partial class MainWindow : Window
       }
 
       var result = ProcessScanResult(proj.Name, reportDir, success);
+      result.ProjectLocalPath = workingDir;
       ScanResults.Add(result);
 
       string status = success ? "[SUCESSO]" : "[FALHA]";
@@ -678,6 +680,174 @@ public partial class MainWindow : Window
         FileName = result.ReportHtmlPath,
         UseShellExecute = true
       });
+    }
+  }
+
+  private void BtnAnalyzeCopilot_Click(object sender, RoutedEventArgs e)
+  {
+    if (sender is FrameworkElement element && element.DataContext is ScanResult result)
+    {
+      if (string.IsNullOrEmpty(result.SarifFilePath) || !File.Exists(result.SarifFilePath))
+      {
+        MessageBox.Show("Arquivo de relatório SARIF não encontrado.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
+
+      try
+      {
+          string sarifContent = File.ReadAllText(result.SarifFilePath);
+          using var doc = JsonDocument.Parse(sarifContent);
+          var root = doc.RootElement;
+
+          var vulns = new List<VulnerabilityItem>();
+
+          if (root.TryGetProperty("runs", out var runs) && runs.ValueKind == JsonValueKind.Array)
+          {
+              foreach (var run in runs.EnumerateArray())
+              {
+                  string toolName = "";
+                  if (run.TryGetProperty("tool", out var tool) && tool.TryGetProperty("driver", out var driver))
+                  {
+                      if (driver.TryGetProperty("name", out var dName))
+                          toolName = dName.GetString() ?? "";
+                  }
+
+                  // Build rules severity dictionary
+                  var ruleSeverities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                  if (run.TryGetProperty("tool", out var tObj) && tObj.TryGetProperty("driver", out var dObj))
+                  {
+                      if (dObj.TryGetProperty("rules", out var rules) && rules.ValueKind == JsonValueKind.Array)
+                      {
+                          foreach (var rule in rules.EnumerateArray())
+                          {
+                              string ruleId = rule.TryGetProperty("id", out var rId) ? rId.GetString() ?? "" : "";
+                              if (string.IsNullOrEmpty(ruleId)) continue;
+
+                              string severity = "Medium";
+                              if (rule.TryGetProperty("properties", out var props) && props.TryGetProperty("security-severity", out var secSev))
+                              {
+                                  string sevStr = secSev.ValueKind == JsonValueKind.Number ? secSev.GetDouble().ToString("0.0", CultureInfo.InvariantCulture) : secSev.GetString() ?? "";
+                                  if (sevStr == "9.0") severity = "Critical";
+                                  else if (sevStr == "7.0") severity = "High";
+                                  else if (sevStr == "4.0") severity = "Medium";
+                                  else if (sevStr == "2.0") severity = "Low";
+                                  else if (sevStr == "1.0") severity = "Info";
+                              }
+                              ruleSeverities[ruleId] = severity;
+                          }
+                      }
+                  }
+
+                  if (run.TryGetProperty("results", out var results) && results.ValueKind == JsonValueKind.Array)
+                  {
+                      foreach (var vuln in results.EnumerateArray())
+                      {
+                          string ruleId = vuln.TryGetProperty("ruleId", out var rId) ? rId.GetString() ?? "Desconhecido" : "Desconhecido";
+                          
+                          string msg = "Sem detalhes";
+                          if (vuln.TryGetProperty("message", out var messageObj) && messageObj.TryGetProperty("text", out var textProp))
+                              msg = textProp.GetString() ?? "Sem detalhes";
+                          
+                          string fileLoc = "Desconhecido";
+                          int lineLoc = 0;
+                          if (vuln.TryGetProperty("locations", out var locs) && locs.ValueKind == JsonValueKind.Array && locs.GetArrayLength() > 0)
+                          {
+                              var physLoc = locs[0].TryGetProperty("physicalLocation", out var pLoc) ? pLoc : default;
+                              if (physLoc.ValueKind == JsonValueKind.Object)
+                              {
+                                  if (physLoc.TryGetProperty("artifactLocation", out var artLoc) && artLoc.TryGetProperty("uri", out var uriProp))
+                                      fileLoc = uriProp.GetString() ?? "Desconhecido";
+                                      
+                                  if (physLoc.TryGetProperty("region", out var region) && region.TryGetProperty("startLine", out var sLine))
+                                      lineLoc = sLine.GetInt32();
+                              }
+                          }
+
+                          // Get severity from dictionary
+                          string severity = "Medium";
+                          if (ruleSeverities.TryGetValue(ruleId, out var mappedSeverity))
+                          {
+                              severity = mappedSeverity;
+                          }
+
+                          // Type parsing (fallback to ruleId if toolName is generic)
+                          string type = "SAST";
+                          if (toolName.Contains("SCA", StringComparison.OrdinalIgnoreCase) || ruleId.Contains("(sca)", StringComparison.OrdinalIgnoreCase))
+                              type = "SCA";
+
+                          vulns.Add(new VulnerabilityItem
+                          {
+                              Id = ruleId,
+                              Message = msg,
+                              FileLocation = fileLoc,
+                              Line = lineLoc,
+                              Severity = severity,
+                              Type = type,
+                              IsSelected = true
+                          });
+                      }
+                  }
+              }
+          }
+
+          if (vulns.Count == 0)
+          {
+              MessageBox.Show("Nenhuma vulnerabilidade encontrada no relatório SARIF para analisar.", "Informação", MessageBoxButton.OK, MessageBoxImage.Information);
+              return;
+          }
+
+          var filterWindow = new CopilotFilterWindow(vulns) { Owner = this };
+          filterWindow.ShowDialog();
+
+          if (!filterWindow.IsConfirmed) return;
+
+          var selectedVulns = filterWindow.SelectedVulnerabilities;
+          if (selectedVulns.Count == 0)
+          {
+              MessageBox.Show("Nenhuma vulnerabilidade selecionada.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+              return;
+          }
+
+          var prompt = new StringBuilder();
+          prompt.AppendLine("Atue como um especialista em segurança de código. O Checkmarx encontrou as seguintes vulnerabilidades no meu projeto. Como posso corrigi-las?");
+          
+          int count = 1;
+          foreach (var v in selectedVulns)
+          {
+              prompt.AppendLine($"{count}) [{v.Id} ({v.Type})] Arquivo: {v.FileLocation} na linha {v.Line}");
+              prompt.AppendLine($"   Detalhe: {v.Message}");
+              count++;
+          }
+
+          Clipboard.SetText(prompt.ToString());
+          MessageBox.Show("O prompt detalhado das vulnerabilidades selecionadas foi copiado para a Área de Transferência!\n\nAbra o chat do Copilot no Visual Studio e cole o texto (Ctrl+V) para analisar.", "Copiado com Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
+
+          if (!string.IsNullOrEmpty(result.ProjectLocalPath) && Directory.Exists(result.ProjectLocalPath))
+          {
+              try
+              {
+                  Process.Start(new ProcessStartInfo
+                  {
+                      FileName = "devenv",
+                      Arguments = $"\"{result.ProjectLocalPath}\"",
+                      UseShellExecute = true
+                  });
+              }
+              catch
+              {
+                  Process.Start(new ProcessStartInfo
+                  {
+                      FileName = "explorer",
+                      Arguments = $"\"{result.ProjectLocalPath}\"",
+                      UseShellExecute = true
+                  });
+              }
+          }
+      }
+      catch (Exception ex)
+      {
+          MessageBox.Show($"Erro ao processar o SARIF ou abrir o Visual Studio: {ex.Message}", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+      }
     }
   }
 

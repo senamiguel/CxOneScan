@@ -156,7 +156,7 @@ public class CxCliService
         args.Append($" --scan-types \"{string.Join(",", scanTypes)}\"");
 
         if (incremental)
-            args.Append(" --incremental");
+            args.Append(" --sast-incremental");
 
         if (!string.IsNullOrWhiteSpace(tags))
             args.Append($" --tags \"{tags}\"");
@@ -165,7 +165,8 @@ public class CxCliService
         if (!string.IsNullOrWhiteSpace(projectGroups))
             args.Append($" --project-groups \"{projectGroups}\"");
 
-        args.Append($" --report-format json,summaryHTML");
+        args.Append($" --report-format json,summaryHTML,sarif");
+        args.Append($" --output-name \"{projectName}\"");
         args.Append($" --output-path \"{reportOutputPath}\"");
 
         args.Append($" --tenant \"{tenant}\"");
