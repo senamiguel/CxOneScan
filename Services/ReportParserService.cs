@@ -111,6 +111,7 @@ public static class ReportParserService
 
             switch (severity)
             {
+                case "CRITICAL": result.CriticalCount += count; break;
                 case "HIGH":   result.HighCount += count; break;
                 case "MEDIUM": result.MediumCount += count; break;
                 case "LOW":    result.LowCount += count; break;
@@ -137,6 +138,7 @@ public static class ReportParserService
     {
         switch (severity)
         {
+            case "CRITICAL": result.CriticalCount++; break;
             case "HIGH":   result.HighCount++; break;
             case "MEDIUM": result.MediumCount++; break;
             case "LOW":    result.LowCount++; break;

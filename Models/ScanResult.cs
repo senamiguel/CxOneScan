@@ -7,6 +7,7 @@ namespace CxDesktopWrapper.Models;
 public class ScanResult : INotifyPropertyChanged
 {
     private string _projectName = string.Empty;
+    private int _criticalCount;
     private int _highCount;
     private int _mediumCount;
     private int _lowCount;
@@ -23,6 +24,12 @@ public class ScanResult : INotifyPropertyChanged
     {
         get => _projectName;
         set => SetProperty(ref _projectName, value);
+    }
+
+    public int CriticalCount
+    {
+        get => _criticalCount;
+        set => SetProperty(ref _criticalCount, value);
     }
 
     public int HighCount

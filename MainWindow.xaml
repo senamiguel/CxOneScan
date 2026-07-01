@@ -14,6 +14,7 @@
 
   <Window.Resources>
     <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+    <SolidColorBrush x:Key="SeverityCriticalBrush" Color="#9B30FF"/>
     <SolidColorBrush x:Key="SeverityHighBrush" Color="#FF4D4D"/>
     <SolidColorBrush x:Key="SeverityMediumBrush" Color="#FFAA00"/>
     <SolidColorBrush x:Key="SeverityLowBrush" Color="#FFDD00"/>
@@ -177,6 +178,13 @@
             <DataGrid.Columns>
               <DataGridTextColumn Header="Projeto" Binding="{Binding ProjectName}" Width="200"/>
               <DataGridTextColumn Header="Data" Binding="{Binding ScanDate, StringFormat='dd/MM/yyyy HH:mm'}" Width="140"/>
+              <DataGridTemplateColumn Header="🟣 Critical" Width="80">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding CriticalCount}" Foreground="{StaticResource SeverityCriticalBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="🔴 High" Width="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
