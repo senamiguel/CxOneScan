@@ -10,6 +10,12 @@
         mc:Ignorable="d"
         Title="CxOneScan — Configuração Inicial" Height="520" Width="750" WindowStartupLocation="CenterScreen" ResizeMode="NoResize" Icon="app_logo.png">
 
+    <Window.Resources>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#2E8B57"/> <!-- ForestGreen -->
+        <SolidColorBrush x:Key="WarningBrush" Color="#DAA520"/> <!-- Goldenrod -->
+        <SolidColorBrush x:Key="ErrorBrush" Color="#DC143C"/> <!-- Crimson -->
+    </Window.Resources>
+
     <Grid Margin="20" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
         <Grid.RowDefinitions>
             <RowDefinition Height="*" />
@@ -28,7 +34,7 @@
                 <Grid Margin="10">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                         <TextBlock Text="🚀" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-                        <TextBlock Text="Bem-vindo ao CxOneScan" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" Foreground="White" Margin="0,0,0,10"/>
+                        <TextBlock Text="Bem-vindo ao CxOneScan" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                         <TextBlock Text="Este assistente irá ajudá-lo a configurar o ambiente do Checkmarx One CLI." FontSize="14" HorizontalAlignment="Center" TextAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Width="500" TextWrapping="Wrap" Margin="0,0,0,30"/>
                         <TextBlock Text="Para começar, clique em Avançar." FontSize="13" HorizontalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                     </StackPanel>
@@ -43,7 +49,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0">
-                        <TextBlock Text="1. Configurar Checkmarx One CLI" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBlock Text="1. Configurar Checkmarx One CLI" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,5"/>
                         <TextBlock Text="Precisamos do executável do Checkmarx One CLI (cx.exe). Se não o possui, você pode baixá-lo e instalá-lo automaticamente." FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
                     </StackPanel>
 
@@ -60,9 +66,13 @@
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="txtCliPath" Text="C:\Checkmarx\cx.exe" Padding="8" FontSize="13" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
-                            <Button Content="Procurar..." Grid.Column="1" Padding="15,8" Click="BtnBrowseCli_Click" Cursor="Hand" Margin="0,0,8,0"/>
-                            <Button x:Name="btnInstallCli" Content="Instalar Automaticamente" Grid.Column="2" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnInstallCli_Click" Cursor="Hand"/>
+                            <TextBox x:Name="txtCliPath" Padding="8" FontSize="13" VerticalContentAlignment="Center" Margin="0,0,10,0"
+                                     ui:ControlHelper.PlaceholderText="Selecione ou instale o cx.exe"
+                                     ToolTip="Caminho completo para o executável cx.exe do Checkmarx One CLI"/>
+                            <Button Content="Procurar..." Grid.Column="1" Padding="15,8" Click="BtnBrowseCli_Click" Cursor="Hand" Margin="0,0,8,0"
+                                    ToolTip="Procurar cx.exe no sistema de arquivos"/>
+                            <Button x:Name="btnInstallCli" Content="Instalar Automaticamente" Grid.Column="2" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnInstallCli_Click" Cursor="Hand"
+                                    ToolTip="Baixar e instalar a versão mais recente do CLI automaticamente"/>
                         </Grid>
 
                         <Border Grid.Row="2" Padding="12" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
@@ -80,29 +90,46 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
                     <StackPanel Grid.Row="0">
-                        <TextBlock Text="2. Autenticação Checkmarx One" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,5"/>
+                        <TextBlock Text="2. Autenticação Checkmarx One" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,5"/>
                         <TextBlock Text="Insira os dados da sua conta para conectar à plataforma do Checkmarx One." FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" Margin="0,0,0,20"/>
                     </StackPanel>
 
                     <StackPanel Grid.Row="1" VerticalAlignment="Center">
                         <TextBlock Text="Tenant Name:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5" FontSize="13"/>
-                        <TextBox x:Name="txtTenant" Padding="8" FontSize="13" Margin="0,0,0,15" ui:ControlHelper.PlaceholderText="Ex: minha-empresa"/>
+                        <TextBox x:Name="txtTenant" Padding="8" FontSize="13" Margin="0,0,0,15" ui:ControlHelper.PlaceholderText="Ex: minha-empresa"
+                                 ToolTip="Nome do Tenant do Checkmarx One (ex: minha-empresa)"/>
 
                         <TextBlock Margin="0,0,0,5" FontSize="13">
                             <Run Text="API Key " Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                            <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="#0078D7">
+                            <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="{DynamicResource SystemControlHyperlinkTextBrush}">
                                 <Run Text="(Gerar Chave)" />
                             </Hyperlink>
                             <Run Text=":" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                         </TextBlock>
-                        <PasswordBox x:Name="txtApiKey" Padding="8" FontSize="13" Margin="0,0,0,20"/>
+                        <PasswordBox x:Name="txtApiKey" Padding="8" FontSize="13" Margin="0,0,0,15"
+                                     ToolTip="API Key gerada no portal do Checkmarx One"/>
 
-                        <Grid>
+                        <Grid Margin="0,0,0,15">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Margin="0,0,10,0">
+                                <TextBlock Text="Base URI (Opcional):" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5" FontSize="13"/>
+                                <TextBox x:Name="txtBaseUri" Padding="8" FontSize="13" ToolTip="URL base da plataforma do Checkmarx One"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                                <TextBlock Text="Base Auth URI (Opcional):" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5" FontSize="13"/>
+                                <TextBox x:Name="txtBaseAuthUri" Padding="8" FontSize="13" ToolTip="URL base do servidor de autenticação do Checkmarx One"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Margin="0,0,0,10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <Button x:Name="btnValidateAuth" Content="Testar Conexão" Padding="20,10" Style="{DynamicResource AccentButtonStyle}" Click="BtnValidateAuth_Click" Cursor="Hand"/>
+                            <Button x:Name="btnValidateAuth" Content="Testar Conexão" Padding="20,10" Style="{DynamicResource AccentButtonStyle}" Click="BtnValidateAuth_Click" Cursor="Hand" ToolTip="Valida a autenticação no Checkmarx One via CLI"/>
                             <TextBlock x:Name="lblAuthStatus" Grid.Column="1" Text="Não Autenticado" VerticalAlignment="Center" Margin="15,0,0,0" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorDisabledBrush}"/>
                         </Grid>
                     </StackPanel>
@@ -114,7 +141,7 @@
                 <Grid Margin="10">
                     <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                         <TextBlock Text="🎉" FontSize="60" HorizontalAlignment="Center" Margin="0,0,0,20"/>
-                        <TextBlock Text="Tudo Pronto!" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" Foreground="White" Margin="0,0,0,10"/>
+                        <TextBlock Text="Tudo Pronto!" FontSize="26" FontWeight="Bold" HorizontalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                         <TextBlock Text="A configuração inicial do CxOneScan foi concluída com sucesso." FontSize="14" HorizontalAlignment="Center" TextAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Width="500" TextWrapping="Wrap" Margin="0,0,0,30"/>
                         <TextBlock Text="Clique em Concluir para iniciar o aplicativo." FontSize="13" HorizontalAlignment="Center" Foreground="{DynamicResource TextFillColorTertiaryBrush}"/>
                     </StackPanel>
@@ -131,18 +158,20 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Button x:Name="btnCancel" Content="Cancelar" Padding="15,8" Click="BtnCancel_Click" Cursor="Hand"/>
+                <Button x:Name="btnCancel" Content="Cancelar" Padding="15,8" Click="BtnCancel_Click" Cursor="Hand" ToolTip="Cancela a configuração inicial"/>
                 
                 <!-- Indicators -->
                 <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Ellipse x:Name="ind1" Width="8" Height="8" Fill="{DynamicResource SystemControlHighlightAccentBrush}" Margin="4"/>
-                    <Ellipse x:Name="ind2" Width="8" Height="8" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
-                    <Ellipse x:Name="ind3" Width="8" Height="8" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
-                    <Ellipse x:Name="ind4" Width="8" Height="8" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
+                    <Ellipse x:Name="ind1" Width="12" Height="12" Fill="{DynamicResource SystemControlHighlightAccentBrush}" Margin="4"/>
+                    <Ellipse x:Name="ind2" Width="12" Height="12" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
+                    <Ellipse x:Name="ind3" Width="12" Height="12" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
+                    <Ellipse x:Name="ind4" Width="12" Height="12" Fill="{DynamicResource SystemControlDisabledBaseLowBrush}" Margin="4"/>
                 </StackPanel>
 
-                <Button x:Name="btnBack" Content="Voltar" Grid.Column="2" Padding="15,8" Margin="0,0,10,0" Click="BtnBack_Click" Visibility="Collapsed" Cursor="Hand"/>
-                <Button x:Name="btnNext" Content="Avançar" Grid.Column="3" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnNext_Click" Cursor="Hand"/>
+                <Button x:Name="btnBack" Content="Voltar" Grid.Column="2" Padding="15,8" Margin="0,0,10,0" Click="BtnBack_Click" Visibility="Collapsed" Cursor="Hand"
+                        ToolTip="Voltar ao passo anterior"/>
+                <Button x:Name="btnNext" Content="Avançar" Grid.Column="3" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnNext_Click" Cursor="Hand"
+                        ToolTip="Avançar para o próximo passo"/>
             </Grid>
         </Border>
     </Grid>

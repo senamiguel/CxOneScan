@@ -1,15 +1,15 @@
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.IO.Compression;
 using System.Net.Http;
-using System.Security.Cryptography;
-using System.Text;
+using System.Threading;
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Shapes;
 using CxDesktopWrapper.Services;
 using CxDesktopWrapper.Models;
+using CxDesktopWrapper.Common;
 
 namespace CxDesktopWrapper;
 
@@ -17,56 +17,76 @@ public partial class SetupWizardWindow : Window
 {
     private int _currentStep = 0;
     private readonly CxCliService _cliService = new();
-    private readonly string KeyFile = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-        "CxDesktopWrapper", "secure_key.dat");
+    private bool _isWizardAuthenticated = false;
 
     public SetupWizardWindow()
     {
         InitializeComponent();
+        ApplyTheme(AppSettingsService.Instance.Theme);
         UpdateStepUI();
+    }
+
+    private void ApplyTheme(string theme)
+    {
+        try
+        {
+            iNKORE.UI.WPF.Modern.ThemeManager.SetRequestedTheme(this, theme == "Light" ? iNKORE.UI.WPF.Modern.ElementTheme.Light : iNKORE.UI.WPF.Modern.ElementTheme.Dark);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine("Erro ao aplicar tema no Wizard: " + ex.Message);
+        }
     }
 
     private void BtnNext_Click(object sender, RoutedEventArgs e)
     {
-        if (_currentStep == 1)
+        try
         {
-            string cliPath = txtCliPath.Text;
-            if (!File.Exists(cliPath))
+            if (_currentStep == 1)
             {
-                MessageBox.Show("Por favor, selecione um caminho de CLI (cx.exe) válido ou clique em Instalar.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
+                string cliPath = txtCliPath.Text;
+                if (!File.Exists(cliPath))
+                {
+                    MessageBox.Show("Por favor, selecione um caminho de CLI (cx.exe) válido ou clique em Instalar.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
             }
-        }
-        else if (_currentStep == 2)
-        {
-            if (lblAuthStatus.Text != "Autenticado")
+            else if (_currentStep == 2)
             {
-                var result = MessageBox.Show("Você não testou a conexão com sucesso. Deseja continuar mesmo assim?", "Aviso", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                if (result != MessageBoxResult.Yes) return;
-            }
-        }
-
-        if (_currentStep < 3)
-        {
-            _currentStep++;
-            UpdateStepUI();
-        }
-        else
-        {
-            var settings = AppSettingsService.Instance;
-            settings.CliPath = txtCliPath.Text;
-            settings.Tenant = txtTenant.Text.Trim();
-            settings.IsFirstRunCompleted = true;
-            AppSettingsService.Save(settings);
-
-            if (!string.IsNullOrEmpty(txtApiKey.Password))
-            {
-                SaveEncryptedApiKey(txtApiKey.Password);
+                if (!_isWizardAuthenticated)
+                {
+                    var result = MessageBox.Show("Você não testou a conexão com sucesso. Deseja continuar mesmo assim?", "Aviso", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                    if (result != MessageBoxResult.Yes) return;
+                }
             }
 
-            DialogResult = true;
-            Close();
+            if (_currentStep < 3)
+            {
+                _currentStep++;
+                UpdateStepUI();
+            }
+            else
+            {
+                var settings = AppSettingsService.Instance;
+                settings.CliPath = txtCliPath.Text;
+                settings.Tenant = txtTenant.Text.Trim();
+                settings.BaseUri = txtBaseUri.Text.Trim();
+                settings.BaseAuthUri = txtBaseAuthUri.Text.Trim();
+                settings.IsFirstRunCompleted = true;
+                AppSettingsService.Save(settings);
+
+                if (!string.IsNullOrEmpty(txtApiKey.Password))
+                {
+                    CredentialService.SaveEncryptedApiKey(txtApiKey.Password);
+                }
+
+                DialogResult = true;
+                Close();
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("Erro ao avançar no assistente: " + ex.Message, "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
 
@@ -91,6 +111,21 @@ public partial class SetupWizardWindow : Window
 
         btnBack.Visibility = _currentStep == 0 ? Visibility.Collapsed : Visibility.Visible;
         btnNext.Content = _currentStep == 3 ? "Concluir" : "Avançar";
+
+        // Pré-popular campos com valores salvos (ou defaults) ao entrar nos steps
+        if (_currentStep == 1)
+        {
+            string savedCliPath = AppSettingsService.Instance.CliPath;
+            if (!string.IsNullOrEmpty(savedCliPath))
+                txtCliPath.Text = savedCliPath;
+        }
+        else if (_currentStep == 2)
+        {
+            string savedBaseUri = AppSettingsService.Instance.BaseUri;
+            string savedBaseAuthUri = AppSettingsService.Instance.BaseAuthUri;
+            txtBaseUri.Text = !string.IsNullOrEmpty(savedBaseUri) ? savedBaseUri : "https://ast.checkmarx.net";
+            txtBaseAuthUri.Text = !string.IsNullOrEmpty(savedBaseAuthUri) ? savedBaseAuthUri : "https://iam.checkmarx.net";
+        }
 
         UpdateIndicators();
     }
@@ -117,37 +152,34 @@ public partial class SetupWizardWindow : Window
         {
             txtCliPath.Text = dialog.FileName;
             lblCliStatus.Text = "CLI selecionado: " + dialog.FileName;
-            lblCliStatus.Foreground = Brushes.LightGreen;
+            lblCliStatus.Foreground = (Brush)FindResource("SuccessBrush");
         }
     }
 
     private async void BtnInstallCli_Click(object sender, RoutedEventArgs e)
     {
-        string url = "https://github.com/Checkmarx/ast-cli/releases/latest/download/ast-cli_windows_x64.zip";
-        string destFolder = @"C:\Checkmarx";
-        string zipPath = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ast-cli.zip");
-
         btnInstallCli.IsEnabled = false;
-        lblCliStatus.Text = "Baixando Checkmarx CLI mais recente...";
-        lblCliStatus.Foreground = Brushes.Orange;
+        lblCliStatus.Text = "Baixando Checkmarx CLI...";
+        lblCliStatus.Foreground = (Brush)FindResource("WarningBrush");
 
         try
         {
-            using HttpClient client = new();
-            var response = await client.GetByteArrayAsync(url);
-            await File.WriteAllBytesAsync(zipPath, response);
+            using var cts = new CancellationTokenSource();
+            string cliPath = await CliInstallerService.DownloadAndInstallCliAsync(
+                CheckmarxApiService.SharedHttpClient,
+                AppConstants.CliDownloadUrl,
+                AppConstants.DefaultCliDirectory,
+                msg => Dispatcher.Invoke(() => lblCliStatus.Text = msg),
+                cts.Token);
 
-            if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
-            ZipFile.ExtractToDirectory(zipPath, destFolder, true);
-
-            txtCliPath.Text = System.IO.Path.Combine(destFolder, "cx.exe");
-            lblCliStatus.Text = "CLI instalado com sucesso em: " + txtCliPath.Text;
-            lblCliStatus.Foreground = Brushes.LightGreen;
+            txtCliPath.Text = cliPath;
+            lblCliStatus.Text = "CLI instalado com sucesso em: " + cliPath;
+            lblCliStatus.Foreground = (Brush)FindResource("SuccessBrush");
         }
         catch (Exception ex)
         {
             lblCliStatus.Text = "Erro ao instalar CLI: " + ex.Message;
-            lblCliStatus.Foreground = Brushes.Red;
+            lblCliStatus.Foreground = (Brush)FindResource("ErrorBrush");
         }
         finally
         {
@@ -160,6 +192,8 @@ public partial class SetupWizardWindow : Window
         string cliPath = txtCliPath.Text;
         string tenant = txtTenant.Text.Trim();
         string apiKey = txtApiKey.Password;
+        string baseUri = txtBaseUri.Text.Trim();
+        string baseAuthUri = txtBaseAuthUri.Text.Trim();
 
         if (!File.Exists(cliPath))
         {
@@ -167,63 +201,69 @@ public partial class SetupWizardWindow : Window
             return;
         }
 
-        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey))
+        if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(baseUri) || string.IsNullOrEmpty(baseAuthUri))
         {
-            MessageBox.Show("Tenant e API Key são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+            MessageBox.Show("Todos os campos são obrigatórios para validar a conexão.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
 
         btnValidateAuth.IsEnabled = false;
         lblAuthStatus.Text = "Conectando...";
-        lblAuthStatus.Foreground = Brushes.Orange;
+        lblAuthStatus.Foreground = (Brush)FindResource("WarningBrush");
 
-        string args = $"auth validate --tenant \"{tenant}\" --apikey \"{apiKey}\" --base-uri \"https://ast.checkmarx.net\" --base-auth-uri \"https://iam.checkmarx.net\"";
-
-        using var cts = new CancellationTokenSource();
-        bool success = await _cliService.RunScanAsync(cliPath, args, null!, apiKey, cts.Token);
-
-        if (success)
+        try
         {
-            lblAuthStatus.Text = "Autenticado";
-            lblAuthStatus.Foreground = Brushes.LightGreen;
+            var envVars = new Dictionary<string, string>
+            {
+                { "CX_APIKEY", apiKey },
+                { "CX_TENANT", tenant },
+                { "CX_BASE_URI", baseUri },
+                { "CX_BASE_AUTH_URI", baseAuthUri }
+            };
+
+            using var cts = new CancellationTokenSource();
+            bool success = await _cliService.RunScanAsync(cliPath, new[] { "auth", "validate" }, AppDomain.CurrentDomain.BaseDirectory, envVars, cts.Token);
+
+            if (success)
+            {
+                CredentialService.SaveEncryptedApiKey(apiKey);
+                lblAuthStatus.Text = "Autenticado";
+                lblAuthStatus.Foreground = (Brush)FindResource("SuccessBrush");
+                _isWizardAuthenticated = true;
+            }
+            else
+            {
+                lblAuthStatus.Text = "Falha na validação";
+                lblAuthStatus.Foreground = (Brush)FindResource("ErrorBrush");
+                _isWizardAuthenticated = false;
+            }
         }
-        else
+        catch (Exception ex)
         {
-            lblAuthStatus.Text = "Falha na validação";
-            lblAuthStatus.Foreground = Brushes.Red;
+            lblAuthStatus.Text = "Erro na validação: " + ex.Message;
+            lblAuthStatus.Foreground = (Brush)FindResource("ErrorBrush");
+            _isWizardAuthenticated = false;
         }
-        btnValidateAuth.IsEnabled = true;
+        finally
+        {
+            btnValidateAuth.IsEnabled = true;
+        }
     }
 
     private void Hyperlink_RequestNavigate(object sender, System.Windows.Navigation.RequestNavigateEventArgs e)
     {
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = e.Uri.AbsoluteUri,
-            UseShellExecute = true
-        });
-        e.Handled = true;
-    }
-
-    private void SaveEncryptedApiKey(string apiKey)
-    {
         try
         {
-            Directory.CreateDirectory(System.IO.Path.GetDirectoryName(KeyFile)!);
-            byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
-            byte[] dataToWrite;
-            try
+            Process.Start(new ProcessStartInfo
             {
-                dataToWrite = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-            }
-            catch (PlatformNotSupportedException)
-            {
-                dataToWrite = Encoding.UTF8.GetBytes("FALLBACK:" + Convert.ToBase64String(plainBytes));
-            }
-            File.WriteAllBytes(KeyFile, dataToWrite);
+                FileName = e.Uri.AbsoluteUri,
+                UseShellExecute = true
+            });
+            e.Handled = true;
         }
-        catch
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("Erro ao abrir link: " + ex.Message);
         }
     }
 }
