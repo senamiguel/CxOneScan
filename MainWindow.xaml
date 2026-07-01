@@ -4,6 +4,8 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:CxDesktopWrapper"
+        xmlns:services="clr-namespace:CxDesktopWrapper.Services"
+        xmlns:converters="clr-namespace:CxDesktopWrapper.Converters"
         xmlns:ui="http://schemas.inkore.net/lib/ui/wpf/modern"
         ui:WindowHelper.UseModernWindowStyle="True"
         ui:ThemeManager.RequestedTheme="Dark"
@@ -11,16 +13,24 @@
         Title="CxOneScan — Checkmarx One Desktop Client" Height="850" Width="1300" MinWidth="1100" MinHeight="750" WindowStartupLocation="CenterScreen" Icon="/app_logo.png">
 
   <Window.Resources>
-    <local:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+    <converters:StringToVisibilityConverter x:Key="StringToVisibilityConverter"/>
+    <SolidColorBrush x:Key="SeverityHighBrush" Color="#FF4D4D"/>
+    <SolidColorBrush x:Key="SeverityMediumBrush" Color="#FFAA00"/>
+    <SolidColorBrush x:Key="SeverityLowBrush" Color="#FFDD00"/>
+    <SolidColorBrush x:Key="SeverityInfoBrush" Color="#33AAFF"/>
+    <SolidColorBrush x:Key="SuccessBrush" Color="#2E8B57"/> <!-- ForestGreen -->
+    <SolidColorBrush x:Key="WarningBrush" Color="#DAA520"/> <!-- Goldenrod -->
+    <SolidColorBrush x:Key="ErrorBrush" Color="#DC143C"/> <!-- Crimson -->
   </Window.Resources>
 
   <Grid Margin="15" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
     <Grid.RowDefinitions>
       <RowDefinition Height="*" />
-      <RowDefinition Height="Auto" />
+      <RowDefinition Height="5" />
+      <RowDefinition Height="220" MinHeight="100" />
     </Grid.RowDefinitions>
 
-    <TabControl x:Name="mainTabControl" Grid.Row="0" Margin="0,0,0,10">
+    <TabControl x:Name="mainTabControl" Grid.Row="0" Margin="0,0,0,5">
 
       <TabItem Header="📂 Projetos &amp; Scan">
         <Grid Margin="10">
@@ -39,15 +49,17 @@
                 <RowDefinition Height="Auto"/>
               </Grid.RowDefinitions>
 
-              <TextBlock Text="Projetos" FontWeight="SemiBold" FontSize="14" Foreground="White" Margin="0,0,0,10"/>
+              <TextBlock Text="Projetos" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
 
               <Grid Grid.Row="1" Margin="0,0,0,8">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="*"/>
                   <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBox x:Name="txtNewProject" Padding="5" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,5,0" ui:ControlHelper.PlaceholderText="Nome do Novo Projeto"/>
-                <Button Content="＋" Grid.Column="1" Click="BtnAddProject_Click" Style="{DynamicResource AccentButtonStyle}" Cursor="Hand" Width="35" ToolTip="Adicionar Projeto"/>
+                <TextBox x:Name="txtNewProject" Padding="5" FontSize="12" VerticalContentAlignment="Center" Margin="0,0,5,0" 
+                         ui:ControlHelper.PlaceholderText="Nome do Novo Projeto" KeyDown="TxtNewProject_KeyDown"
+                         ToolTip="Insira o nome do novo projeto e pressione Enter ou clique em ＋"/>
+                <Button Content="＋" Grid.Column="1" Click="BtnAddProject_Click" Style="{DynamicResource AccentButtonStyle}" Cursor="Hand" Width="44" Height="30" ToolTip="Adicionar novo projeto à lista"/>
               </Grid>
 
               <DataGrid x:Name="dgProjects" Grid.Row="2"
@@ -60,18 +72,17 @@
                         RowBackground="Transparent"
                         AlternatingRowBackground="{DynamicResource ControlFillColorDefaultBrush}">
                 <DataGrid.Columns>
-                  <DataGridCheckBoxColumn Binding="{Binding IsSelected, UpdateSourceTrigger=PropertyChanged}" Width="40" ElementStyle="{DynamicResource DefaultCheckBoxStyle}" EditingElementStyle="{DynamicResource DefaultCheckBoxStyle}"/>
                   <DataGridTemplateColumn Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="White" FontSize="13"/>
+                        <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontSize="13" ToolTip="Clique para selecionar e editar os detalhes do projeto"/>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
                   <DataGridTemplateColumn Width="45">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate>
-                        <Button Content="🗑️" Padding="5,2" Click="BtnRemoveProject_Click" Cursor="Hand" Background="Transparent" BorderBrush="Transparent" Foreground="#FF6B6B"/>
+                        <Button Content="🗑️" Padding="8,4" Click="BtnRemoveProject_Click" Cursor="Hand" Background="Transparent" BorderBrush="Transparent" Foreground="{StaticResource ErrorBrush}" ToolTip="Remover este projeto da lista"/>
                       </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                   </DataGridTemplateColumn>
@@ -79,21 +90,23 @@
               </DataGrid>
 
               <StackPanel Grid.Row="3">
-                <Button Content="📁 Importar Solution (.sln)" Click="BtnImportSolution_Click" HorizontalAlignment="Stretch" Padding="8,6" Margin="0,10,0,5" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}"/>
-                <Button Content="🔍 Escanear Diretório (.csproj)" Click="BtnScanDirectory_Click" HorizontalAlignment="Stretch" Padding="8,6" Cursor="Hand"/>
+                <Button Content="📁 Escanear Pasta do Projeto" Click="BtnScanDirectory_Click" HorizontalAlignment="Stretch" Padding="8,6" Margin="0,10,0,0" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}" ToolTip="Escaneia um diretório local para importar projetos .csproj de forma automática"/>
               </StackPanel>
             </Grid>
           </Border>
 
-          <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent" Cursor="SizeWE"/>
+          <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource CardStrokeColorDefaultBrush}" Cursor="SizeWE" ToolTip="Arraste para redimensionar o painel lateral"/>
 
           <Border Grid.Column="2" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
             <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,10,0">
               <StackPanel>
 
-                <TextBlock x:Name="lblDetailTitle" Text="Selecione um projeto na lista" FontWeight="SemiBold" FontSize="14" Foreground="White" Margin="0,0,0,15"/>
+                <TextBlock x:Name="lblDetailTitle" Text="Selecione um projeto na lista lateral" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,15"/>
 
                 <StackPanel x:Name="pnlProjectDetail" IsEnabled="False">
+
+                  <TextBlock Text="Nome do Projeto:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
+                  <TextBox x:Name="txtDetailName" Padding="5" FontSize="12" Margin="0,0,0,12" TextChanged="DetailField_TextChanged" ToolTip="Nome do projeto registrado no Checkmarx One (Case-Sensitive)"/>
 
                   <TextBlock Text="Pasta Local do Projeto:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
                   <Grid Margin="0,0,0,12">
@@ -101,50 +114,33 @@
                       <ColumnDefinition Width="*"/>
                       <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
-                    <TextBox x:Name="txtDetailLocalPath" Padding="5" FontSize="12" TextChanged="DetailField_TextChanged"/>
-                    <Button Content="Procurar..." Grid.Column="1" Padding="8,5" Margin="8,0,0,0" Click="BtnBrowseProjectFolder_Click" Cursor="Hand"/>
+                    <TextBox x:Name="txtDetailLocalPath" Padding="5" FontSize="12" TextChanged="DetailField_TextChanged" ToolTip="Diretório contendo o código-fonte local do projeto"/>
+                    <Button Content="Procurar..." Grid.Column="1" Padding="8,5" Margin="8,0,0,0" Click="BtnBrowseProjectFolder_Click" Cursor="Hand" ToolTip="Selecionar pasta no disco local"/>
                   </Grid>
 
                   <TextBlock Text="Branch:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
-                  <TextBox x:Name="txtDetailBranch" Padding="5" FontSize="12" Margin="0,0,0,12" TextChanged="DetailField_TextChanged"/>
+                  <TextBox x:Name="txtDetailBranch" Padding="5" FontSize="12" Margin="0,0,0,12" TextChanged="DetailField_TextChanged" ToolTip="Branch de destino do scan (ex: main, develop)"/>
 
                   <TextBlock Text="Tags:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
-                  <TextBox x:Name="txtDetailTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="tag1,tag2,..." TextChanged="DetailField_TextChanged"/>
+                  <TextBox x:Name="txtDetailTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="tag1,tag2,..." TextChanged="DetailField_TextChanged" ToolTip="Tags do scan separadas por vírgula"/>
 
                   <TextBlock Text="Project Tags:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
-                  <TextBox x:Name="txtDetailProjectTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="key=value,..." TextChanged="DetailField_TextChanged"/>
+                  <TextBox x:Name="txtDetailProjectTags" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="key=value,..." TextChanged="DetailField_TextChanged" ToolTip="Tags permanentes do projeto no portal (chave=valor, separadas por vírgula)"/>
 
                   <TextBlock Text="Project Groups:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
-                  <TextBox x:Name="txtDetailProjectGroups" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="group1,group2,..." TextChanged="DetailField_TextChanged"/>
+                  <TextBox x:Name="txtDetailProjectGroups" Padding="5" FontSize="12" Margin="0,0,0,12" ui:ControlHelper.PlaceholderText="group1,group2,..." TextChanged="DetailField_TextChanged" ToolTip="Grupos aos quais o projeto pertence no portal (separados por vírgula)"/>
 
                   <TextBlock Text="Tipos de Scan:" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,5"/>
-                  <StackPanel Orientation="Horizontal" Margin="0,0,0,15">
-                    <CheckBox x:Name="chkDetailSast" Content="SAST" FontSize="13" Margin="0,0,20,0" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed"/>
-                    <CheckBox x:Name="chkDetailSca" Content="SCA" FontSize="13" Margin="0,0,20,0" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed"/>
-                    <CheckBox x:Name="chkDetailIncremental" Content="Incremental" FontSize="13" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed"/>
-                  </StackPanel>
+                  <WrapPanel Margin="0,0,0,15">
+                    <CheckBox x:Name="chkDetailSast" Content="SAST" FontSize="13" Margin="0,0,20,5" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed" ToolTip="Habilitar análise de segurança estática de código (SAST)"/>
+                    <CheckBox x:Name="chkDetailSca" Content="SCA" FontSize="13" Margin="0,0,20,5" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed" ToolTip="Habilitar análise de composição de software e dependências (SCA)"/>
+                    <CheckBox x:Name="chkDetailIncremental" Content="Incremental" FontSize="13" Margin="0,0,0,5" Checked="DetailCheckbox_Changed" Unchecked="DetailCheckbox_Changed" ToolTip="Executar apenas a análise de arquivos modificados desde o último scan completo"/>
+                  </WrapPanel>
                 </StackPanel>
 
                 <Separator Margin="0,5,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
 
-                <TextBlock Text="⚡ Ações em Lote" FontWeight="SemiBold" FontSize="14" Foreground="#FFD700" Margin="0,0,0,12"/>
-                <TextBlock Text="Aplicar valores aos projetos selecionados (☑):" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,8" FontSize="12"/>
-
-                <Grid Margin="0,0,0,10">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                    <ColumnDefinition Width="*"/>
-                  </Grid.ColumnDefinitions>
-                  <TextBox x:Name="txtBatchTags" Margin="0,0,8,0" ui:ControlHelper.PlaceholderText="Batch Tags"/>
-                  <TextBox x:Name="txtBatchProjectTags" Grid.Column="1" Margin="0,0,8,0" ui:ControlHelper.PlaceholderText="Batch Proj Tags"/>
-                  <TextBox x:Name="txtBatchProjectGroups" Grid.Column="2" ui:ControlHelper.PlaceholderText="Batch Proj Groups"/>
-                </Grid>
-                <Button Content="Aplicar Tags aos Projetos Selecionados" Click="BtnApplyBatchTags_Click" HorizontalAlignment="Stretch" Padding="8,6" Cursor="Hand" Margin="0,0,0,15"/>
-
-                <Separator Margin="0,0,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
-
-                <Button x:Name="btnScan" Content="🚀 Iniciar Scan em Lote" IsEnabled="False" HorizontalAlignment="Stretch" Height="44" Click="BtnScan_Click" Style="{DynamicResource AccentButtonStyle}" FontWeight="Bold" FontSize="14" Cursor="Hand"/>
+                <Button x:Name="btnScan" Content="🚀 Iniciar Scan" IsEnabled="False" ToolTipService.ShowOnDisabled="True" HorizontalAlignment="Stretch" Height="44" Click="BtnScan_Click" Style="{DynamicResource AccentButtonStyle}" FontWeight="Bold" FontSize="14" Cursor="Hand" ToolTip="Inicia a execução do scan no Checkmarx One para o projeto selecionado"/>
               </StackPanel>
             </ScrollViewer>
           </Border>
@@ -158,7 +154,14 @@
             <RowDefinition Height="*"/>
           </Grid.RowDefinitions>
 
-          <TextBlock Text="Resultados dos Scans" FontWeight="SemiBold" FontSize="16" Foreground="White" Margin="0,0,0,12"/>
+          <Grid Grid.Row="0" Margin="0,0,0,12">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="*"/>
+              <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Text="Resultados dos Scans" FontWeight="SemiBold" FontSize="16" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center"/>
+            <Button Content="🧹 Limpar Resultados" Grid.Column="1" Padding="15,6" Click="BtnClearResults_Click" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}" ToolTip="Limpa a lista de resultados dos scans em memória"/>
+          </Grid>
 
           <DataGrid x:Name="dgResults" Grid.Row="1"
                     AutoGenerateColumns="False"
@@ -177,44 +180,52 @@
               <DataGridTemplateColumn Header="🔴 High" Width="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding HighCount}" Foreground="#FF4444" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding HighCount}" Foreground="{StaticResource SeverityHighBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="🟠 Medium" Width="90">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding MediumCount}" Foreground="#FF8C00" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding MediumCount}" Foreground="{StaticResource SeverityMediumBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="🟡 Low" Width="80">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding LowCount}" Foreground="#FFD700" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding LowCount}" Foreground="{StaticResource SeverityLowBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTemplateColumn Header="ℹ Info" Width="70">
+              <DataGridTemplateColumn Header="ℹ Info" Width="90">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
-                    <TextBlock Text="{Binding InfoCount}" Foreground="#87CEEB" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding InfoCount}" Foreground="{StaticResource SeverityInfoBrush}" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
               </DataGridTemplateColumn>
-              <DataGridTextColumn Header="Status" Binding="{Binding StatusMessage}" Width="*"/>
+              <DataGridTemplateColumn Header="Status" Width="*">
+                <DataGridTemplateColumn.CellTemplate>
+                  <DataTemplate>
+                    <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorPrimaryBrush}" FontSize="13"/>
+                  </DataTemplate>
+                </DataGridTemplateColumn.CellTemplate>
+              </DataGridTemplateColumn>
               <DataGridTemplateColumn Header="Ações" Width="280">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate>
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
                       <Button Content="📄 Abrir Relatório" Click="BtnOpenReport_Click"
                               Padding="6,3" Cursor="Hand" FontSize="11" Margin="0,0,5,0"
-                              Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}}"
-                              Style="{DynamicResource AccentButtonStyle}"/>
+                              Visibility="{Binding ReportHtmlPath, Converter={StaticResource StringToVisibilityConverter}, FallbackValue=Collapsed, TargetNullValue=Collapsed}"
+                              Style="{DynamicResource AccentButtonStyle}"
+                              ToolTip="Abre o relatório detalhado em HTML no navegador"/>
                       <Button Content="🤖 Analisar com Copilot" Click="BtnAnalyzeCopilot_Click"
                               Padding="6,3" Cursor="Hand" FontSize="11"
-                              Visibility="{Binding SarifFilePath, Converter={StaticResource StringToVisibilityConverter}}"
-                              Style="{DynamicResource AccentButtonStyle}"/>
+                              Visibility="{Binding SarifFilePath, Converter={StaticResource StringToVisibilityConverter}, FallbackValue=Collapsed, TargetNullValue=Collapsed}"
+                              Style="{DynamicResource AccentButtonStyle}"
+                              ToolTip="Filtra vulnerabilidades do SARIF e copia prompt para o Copilot"/>
                     </StackPanel>
                   </DataTemplate>
                 </DataGridTemplateColumn.CellTemplate>
@@ -227,11 +238,11 @@
       <TabItem Header="⚙️ Configurações">
         <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="0,0,15,0">
           <StackPanel Margin="15" MaxWidth="850" HorizontalAlignment="Left">
-            <TextBlock Text="Configurações do Sistema" FontSize="20" FontWeight="Bold" Foreground="White" Margin="0,0,0,15"/>
+            <TextBlock Text="Configurações do Sistema" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,15"/>
 
             <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
               <StackPanel>
-                <TextBlock Text="🖥️ Checkmarx One CLI (cx.exe)" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="🖥️ Checkmarx One CLI (cx.exe)" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                 <TextBlock Text="Configure o caminho do executável do CLI ou instale a versão mais recente diretamente do GitHub." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10" TextWrapping="Wrap"/>
                 <Grid>
                   <Grid.ColumnDefinitions>
@@ -239,20 +250,23 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                   </Grid.ColumnDefinitions>
-                  <TextBox x:Name="txtSettingCliPath" Padding="8" FontSize="13" VerticalContentAlignment="Center" Margin="0,0,10,0"/>
-                  <Button Content="Procurar..." Grid.Column="1" Padding="15,8" Click="BtnSettingBrowseCli_Click" Cursor="Hand" Margin="0,0,8,0"/>
-                  <Button x:Name="btnSettingInstallCli" Content="Instalar/Atualizar CLI" Grid.Column="2" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingInstallCli_Click" Cursor="Hand"/>
+                  <TextBox x:Name="txtSettingCliPath" Padding="8" FontSize="13" VerticalContentAlignment="Center" Margin="0,0,10,0"
+                           Text="{Binding CliPath, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ToolTip="Caminho completo do arquivo cx.exe no computador"/>
+                  <Button Content="Procurar..." Grid.Column="1" Padding="15,8" Click="BtnSettingBrowseCli_Click" Cursor="Hand" Margin="0,0,8,0" ToolTip="Procura o executável cx.exe no disco local"/>
+                  <Button x:Name="btnSettingInstallCli" Content="Instalar/Atualizar CLI" Grid.Column="2" Padding="15,8" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingInstallCli_Click" Cursor="Hand" ToolTip="Baixa e instala a última versão estável do CLI Checkmarx de forma automática"/>
                 </Grid>
               </StackPanel>
             </Border>
 
             <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
               <StackPanel>
-                <TextBlock Text="🔑 Credenciais &amp; Conexão" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="🔑 Credenciais &amp; Conexão" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                 <TextBlock Text="Informe seus dados do Checkmarx One para autenticação. A API Key será salva de forma segura usando criptografia local." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,15" TextWrapping="Wrap"/>
                 
                 <Grid>
                   <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -264,22 +278,33 @@
                   </Grid.ColumnDefinitions>
 
                   <TextBlock Text="Tenant Name:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
-                  <TextBox x:Name="txtSettingTenant" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" ui:ControlHelper.PlaceholderText="Ex: minha-empresa"/>
+                  <TextBox x:Name="txtSettingTenant" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" 
+                           Text="{Binding Tenant, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ui:ControlHelper.PlaceholderText="Ex: minha-empresa" ToolTip="Nome do Tenant do Checkmarx One"/>
 
                   <TextBlock Grid.Row="1" VerticalAlignment="Center" Margin="0,0,0,10">
                     <Run Text="API Key " Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                    <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="#0078D7">
+                    <Hyperlink NavigateUri="https://ast.checkmarx.net/cxiam/apiKeys" RequestNavigate="Hyperlink_RequestNavigate" TextDecorations="Underline" Foreground="{DynamicResource SystemControlHyperlinkTextBrush}" ToolTip="Clique para abrir a página de geração de API Keys no portal do Checkmarx One">
                       <Run Text="(Gerar)" />
                     </Hyperlink>
                     <Run Text=":" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
                   </TextBlock>
-                  <PasswordBox x:Name="txtSettingApiKey" Grid.Row="1" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+                  <PasswordBox x:Name="txtSettingApiKey" Grid.Row="1" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" ToolTip="Insira a API Key de acesso"/>
 
                   <TextBlock Grid.Row="2" Text="Base URI:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
-                  <TextBox x:Name="txtSettingBaseUri" Grid.Row="2" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingBaseUri" Grid.Row="2" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"
+                           Text="{Binding BaseUri, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ToolTip="URL base da API (ex: https://ast.checkmarx.net)"/>
 
                   <TextBlock Grid.Row="3" Text="Base Auth URI:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
-                  <TextBox x:Name="txtSettingBaseAuthUri" Grid.Row="3" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingBaseAuthUri" Grid.Row="3" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"
+                           Text="{Binding BaseAuthUri, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ToolTip="URL base do servidor IAM de autenticação (ex: https://iam.checkmarx.net)"/>
+
+                  <TextBlock Grid.Row="4" Text="Manter Logado:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <CheckBox x:Name="chkSettingKeepLoggedIn" Grid.Row="4" Grid.Column="1" Content="Autenticar automaticamente ao iniciar scan" FontSize="13" Margin="0,0,0,10"
+                            IsChecked="{Binding KeepLoggedIn, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                            ToolTip="Mantém o estado logado e pula a verificação manual de conexão ao carregar o aplicativo"/>
                 </Grid>
 
                 <Separator Margin="0,10,0,15" Background="{DynamicResource SurfaceStrokeColorDefaultBrush}"/>
@@ -289,7 +314,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
-                  <Button x:Name="btnSettingAuth" Content="🔌 Autenticar e Testar" Padding="20,10" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingAuth_Click" Cursor="Hand"/>
+                  <Button x:Name="btnSettingAuth" Content="🔌 Autenticar e Testar" Padding="20,10" Style="{DynamicResource AccentButtonStyle}" Click="BtnSettingAuth_Click" Cursor="Hand" ToolTip="Valida a API Key e Tenant informados executando um teste de validação"/>
                   <TextBlock x:Name="lblSettingAuthStatus" Grid.Column="1" Text="Não Autenticado" VerticalAlignment="Center" Margin="15,0,0,0" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorDisabledBrush}"/>
                 </Grid>
               </StackPanel>
@@ -297,11 +322,13 @@
 
             <Border Margin="0,0,0,15" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
               <StackPanel>
-                <TextBlock Text="⚙️ Padrões de Scan" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="⚙️ Padrões de Scan" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                 <TextBlock Text="Configurações aplicadas por padrão a novos projetos importados ou criados." FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,15" TextWrapping="Wrap"/>
 
                 <Grid>
                   <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
@@ -312,24 +339,44 @@
                   </Grid.ColumnDefinitions>
 
                   <TextBlock Text="Branch Padrão:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
-                  <TextBox x:Name="txtSettingDefaultBranch" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingDefaultBranch" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10"
+                           Text="{Binding DefaultBranch, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ToolTip="Branch padrão atribuída a novos projetos (geralmente main ou master)"/>
 
                   <TextBlock Grid.Row="1" Text="Tipos de Scan:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
                   <StackPanel Grid.Row="1" Grid.Column="1" Orientation="Horizontal" Margin="0,0,0,10" VerticalAlignment="Center">
-                    <CheckBox x:Name="chkSettingDefaultSast" Content="SAST" FontSize="13" Margin="0,0,20,0"/>
-                    <CheckBox x:Name="chkSettingDefaultSca" Content="SCA" FontSize="13" Margin="0,0,20,0"/>
-                    <CheckBox x:Name="chkSettingDefaultIncremental" Content="Incremental" FontSize="13"/>
+                    <CheckBox x:Name="chkSettingDefaultSast" Content="SAST" FontSize="13" Margin="0,0,20,0"
+                              IsChecked="{Binding DefaultRunSast, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Executar análise de código estático (SAST) por padrão"/>
+                    <CheckBox x:Name="chkSettingDefaultSca" Content="SCA" FontSize="13" Margin="0,0,20,0"
+                              IsChecked="{Binding DefaultRunSca, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Executar análise de bibliotecas de terceiros (SCA) por padrão"/>
+                    <CheckBox x:Name="chkSettingDefaultIncremental" Content="Incremental" FontSize="13"
+                              IsChecked="{Binding DefaultIncremental, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                              ToolTip="Marcar novos projetos como scan incremental por padrão"/>
                   </StackPanel>
 
-                  <TextBlock Grid.Row="2" Text="Validação API:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
-                  <CheckBox x:Name="chkSettingBypassValidation" Content="Pular validação de projetos via API (evita erros 401/conexão)" Grid.Row="2" Grid.Column="1" FontSize="13" Margin="0,0,0,10" VerticalAlignment="Center"/>
+                  <TextBlock Grid.Row="2" Text="Tags Padrão:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingDefaultTags" Grid.Row="2" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" 
+                           Text="{Binding DefaultTags, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ui:ControlHelper.PlaceholderText="Ex: tag1,tag2" ToolTip="Tags padrão atribuídas a novos scans"/>
+
+                  <TextBlock Grid.Row="3" Text="Project Tags Padrão:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingDefaultProjectTags" Grid.Row="3" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" 
+                           Text="{Binding DefaultProjectTags, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ui:ControlHelper.PlaceholderText="Ex: key=value" ToolTip="Tags de projeto padrão atribuídas a novos projetos no portal"/>
+
+                  <TextBlock Grid.Row="4" Text="Proj Groups Padrão:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,0,0,10"/>
+                  <TextBox x:Name="txtSettingDefaultProjectGroups" Grid.Row="4" Grid.Column="1" Padding="8" FontSize="13" Margin="0,0,0,10" 
+                           Text="{Binding DefaultProjectGroups, Source={x:Static services:AppSettingsService.Instance}, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                           ui:ControlHelper.PlaceholderText="Ex: grupo1,grupo2" ToolTip="Grupos padrão de projeto atribuídos a novos projetos"/>
                 </Grid>
               </StackPanel>
             </Border>
 
             <Border Margin="0,0,0,20" Padding="15" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1">
               <StackPanel>
-                <TextBlock Text="🎨 Aparência" FontWeight="SemiBold" FontSize="15" Foreground="White" Margin="0,0,0,10"/>
+                <TextBlock Text="🎨 Aparência" FontWeight="SemiBold" FontSize="15" Foreground="{DynamicResource TextFillColorPrimaryBrush}" Margin="0,0,0,10"/>
                 
                 <Grid>
                   <Grid.ColumnDefinitions>
@@ -337,7 +384,8 @@
                     <ColumnDefinition Width="*"/>
                   </Grid.ColumnDefinitions>
                   <TextBlock Text="Tema do Aplicativo:" VerticalAlignment="Center" Foreground="{DynamicResource TextFillColorSecondaryBrush}"/>
-                  <ComboBox x:Name="cmbSettingTheme" Grid.Column="1" Padding="8" FontSize="13" SelectedIndex="0" Width="150" HorizontalAlignment="Left" SelectionChanged="CmbSettingTheme_SelectionChanged">
+                  <ComboBox x:Name="cmbSettingTheme" Grid.Column="1" Padding="8" FontSize="13" SelectedIndex="0" Width="150" HorizontalAlignment="Left" 
+                            SelectionChanged="CmbSettingTheme_SelectionChanged" ToolTip="Selecione o tema do aplicativo (Claro ou Escuro)">
                     <ComboBoxItem Content="Escuro (Dark)"/>
                     <ComboBoxItem Content="Claro (Light)"/>
                   </ComboBox>
@@ -345,21 +393,22 @@
               </StackPanel>
             </Border>
 
-            <Button Content="💾 Salvar Configurações" Padding="25,12" Style="{DynamicResource AccentButtonStyle}" Click="BtnSaveSettings_Click" FontWeight="SemiBold" FontSize="14" Cursor="Hand" Margin="0,0,0,30"/>
+            <Button Content="💾 Salvar Configurações" Padding="25,12" Style="{DynamicResource AccentButtonStyle}" Click="BtnSaveSettings_Click" FontWeight="SemiBold" FontSize="14" Cursor="Hand" Margin="0,0,0,30" ToolTip="Salva as alterações feitas nas configurações globais em disco"/>
           </StackPanel>
         </ScrollViewer>
       </TabItem>
     </TabControl>
 
-    <Border Grid.Row="1" Padding="10" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
+    <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="{DynamicResource CardStrokeColorDefaultBrush}" Cursor="SizeNS" ToolTip="Arraste para redimensionar o painel de console"/>
+
+    <Border Grid.Row="2" Padding="10" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" CornerRadius="8" BorderBrush="{DynamicResource SurfaceStrokeColorDefaultBrush}" BorderThickness="1">
       <Grid>
         <Grid.RowDefinitions>
           <RowDefinition Height="Auto"/>
-          <RowDefinition Height="Auto"/>
-          <RowDefinition Height="120"/>
+          <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <Grid Margin="0,0,0,8">
+        <Grid Margin="0,0,0,8" Grid.Row="0">
           <Grid.ColumnDefinitions>
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
@@ -367,14 +416,14 @@
             <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="Auto"/>
           </Grid.ColumnDefinitions>
-          <TextBlock Text="Console de Saída" FontWeight="SemiBold" FontSize="14" Foreground="White" VerticalAlignment="Center" Margin="0,0,15,0"/>
-          <ProgressBar x:Name="progressBar" Grid.Column="1" Height="18" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" Margin="0,0,15,0"/>
-          <TextBlock x:Name="lblProgress" Grid.Column="2" Text="Pronto" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" FontSize="12" Margin="0,0,15,0" MinWidth="80"/>
-          <TextBlock x:Name="lblFooterStatus" Grid.Column="3" Text="⚠️ Não Conectado" Foreground="Orange" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,15,0"/>
-          <Button x:Name="btnCancel" Content="⛔ Cancelar" Grid.Column="4" Padding="10,5" Click="BtnCancel_Click" Cursor="Hand" IsEnabled="False" Foreground="#FF6B6B" FontWeight="SemiBold"/>
+          <TextBlock Text="Console de Saída" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" VerticalAlignment="Center" Margin="0,0,15,0"/>
+          <ProgressBar x:Name="progressBar" Grid.Column="1" Height="18" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" Margin="0,0,15,0" Visibility="Collapsed"/>
+          <TextBlock x:Name="lblProgress" Grid.Column="2" Text="Aguardando Configuração" Foreground="{DynamicResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" FontSize="12" Margin="0,0,15,0" MinWidth="140" ToolTip="Percentual de progresso do scan atual"/>
+          <TextBlock x:Name="lblFooterStatus" Grid.Column="3" Text="⚠️ Não Conectado" Foreground="{StaticResource WarningBrush}" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,15,0" ToolTip="Status da conexão com o Checkmarx One"/>
+          <Button x:Name="btnCancel" Content="⛔ Cancelar" Grid.Column="4" Padding="10,5" Click="BtnCancel_Click" Cursor="Hand" IsEnabled="False" Foreground="{StaticResource ErrorBrush}" FontWeight="SemiBold" ToolTip="Cancela a execução do scan ativo"/>
         </Grid>
 
-        <TextBox x:Name="txtConsole" Grid.Row="2" IsReadOnly="True"
+        <TextBox x:Name="txtConsole" Grid.Row="1" IsReadOnly="True"
                  VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
                  FontFamily="Consolas" FontSize="12"
                  Background="{DynamicResource ControlFillColorInputActiveBrush}"

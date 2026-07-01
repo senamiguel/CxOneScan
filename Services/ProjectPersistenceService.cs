@@ -31,8 +31,9 @@ public static class ProjectPersistenceService
             string json = File.ReadAllText(ConfigFilePath);
             return JsonSerializer.Deserialize<List<ProjectItem>>(json, JsonOptions) ?? new List<ProjectItem>();
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("Erro ao carregar projetos: " + ex.Message);
             return new List<ProjectItem>();
         }
     }
@@ -45,8 +46,9 @@ public static class ProjectPersistenceService
             string json = JsonSerializer.Serialize(projects, JsonOptions);
             File.WriteAllText(ConfigFilePath, json);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            System.Diagnostics.Debug.WriteLine("Erro ao salvar projetos: " + ex.Message);
         }
     }
 }

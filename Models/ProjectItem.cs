@@ -14,7 +14,7 @@ public class ProjectItem : INotifyPropertyChanged
     private string _projectGroups = string.Empty;
     private bool _runSast = true;
     private bool _runSca;
-    private bool _incremental;
+    private bool _incremental = true;
 
     public string Name
     {

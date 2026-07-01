@@ -1,33 +1,23 @@
 using Microsoft.Win32;
+using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.IO.Compression;
+using System.Linq;
 using System.Net.Http;
-using System.Security.Cryptography;
 using System.Text;
-using System.Windows;
-using System.Windows.Data;
-using System.Windows.Media;
-using CxDesktopWrapper.Models;
-using CxDesktopWrapper.Services;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Media;
+using CxDesktopWrapper.Services;
+using CxDesktopWrapper.Models;
+using CxDesktopWrapper.Common;
 
 namespace CxDesktopWrapper;
-
-public class StringToVisibilityConverter : IValueConverter
-{
-  public object Convert(object value, Type targetType, object parameter, CultureInfo culture)
-  {
-    return string.IsNullOrEmpty(value as string) ? Visibility.Collapsed : Visibility.Visible;
-  }
-
-  public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
-  {
-    throw new NotSupportedException();
-  }
-}
 
 public partial class MainWindow : Window
 {
@@ -38,16 +28,19 @@ public partial class MainWindow : Window
   private CancellationTokenSource? _scanCts;
   private ProjectItem? _selectedProject;
   private bool _isUpdatingDetail;
+  private bool _isAuthenticatedInSession;
+  private CancellationTokenSource? _saveCts;
 
   public MainWindow()
   {
     InitializeComponent();
     dgProjects.ItemsSource = SavedProjects;
     dgResults.ItemsSource = ScanResults;
-
     LoadProjects();
     LoadSettingsUI();
     WireCliServiceEvents();
+    UpdateScanButtonState();
+    TriggerStartupAuthCheck();
   }
 
   private void WireCliServiceEvents()
@@ -58,34 +51,28 @@ public partial class MainWindow : Window
 
   private void LoadProjects()
   {
-    var loaded = ProjectPersistenceService.Load();
-    foreach (var p in loaded)
-      SavedProjects.Add(p);
-  }
-
-  private void SaveProjects()
-  {
-    ProjectPersistenceService.Save(SavedProjects);
+    try
+    {
+      var projects = ProjectPersistenceService.Load();
+      SavedProjects.Clear();
+      foreach (var p in projects)
+      {
+        SavedProjects.Add(p);
+      }
+    }
+    catch (Exception ex)
+    {
+      AppendToConsole("Erro ao carregar lista de projetos: " + ex.Message);
+    }
   }
 
   private void LoadSettingsUI()
   {
     var settings = AppSettingsService.Instance;
 
-    txtSettingCliPath.Text = settings.CliPath;
-    txtSettingTenant.Text = settings.Tenant;
-    txtSettingBaseUri.Text = settings.BaseUri;
-    txtSettingBaseAuthUri.Text = settings.BaseAuthUri;
-    txtSettingDefaultBranch.Text = settings.DefaultBranch;
-    chkSettingDefaultSast.IsChecked = settings.DefaultRunSast;
-    chkSettingDefaultSca.IsChecked = settings.DefaultRunSca;
-    chkSettingDefaultIncremental.IsChecked = settings.DefaultIncremental;
-    chkSettingBypassValidation.IsChecked = settings.BypassApiValidation;
-
+    txtSettingApiKey.Password = CredentialService.LoadDecryptedApiKey();
     cmbSettingTheme.SelectedIndex = settings.Theme == "Light" ? 1 : 0;
     ApplyTheme(settings.Theme);
-
-    txtSettingApiKey.Password = LoadDecryptedApiKey();
 
     UpdateFooterStatus();
   }
@@ -93,163 +80,95 @@ public partial class MainWindow : Window
   private void UpdateFooterStatus()
   {
     var settings = AppSettingsService.Instance;
-    if (string.IsNullOrEmpty(settings.Tenant))
+    string apiKey = CredentialService.LoadDecryptedApiKey();
+
+    if (string.IsNullOrEmpty(settings.Tenant) || string.IsNullOrEmpty(apiKey))
     {
       lblFooterStatus.Text = "⚠️ Não Configurado";
-      lblFooterStatus.Foreground = Brushes.Orange;
+      lblFooterStatus.Foreground = (Brush)FindResource("WarningBrush");
+      lblProgress.Text = "Aguardando Configuração";
     }
     else
     {
-      lblFooterStatus.Text = $"🔑 Tenant: {settings.Tenant}";
-      lblFooterStatus.Foreground = Brushes.LightGreen;
+      lblFooterStatus.Text = "✓ Configurado";
+      lblFooterStatus.Foreground = (Brush)FindResource("SuccessBrush");
+      lblProgress.Text = "Pronto";
     }
   }
 
-  private void ApplyTheme(string theme)
-  {
-    if (theme == "Light")
-    {
-      iNKORE.UI.WPF.Modern.ThemeManager.Current.ApplicationTheme = iNKORE.UI.WPF.Modern.ApplicationTheme.Light;
-    }
-    else
-    {
-      iNKORE.UI.WPF.Modern.ThemeManager.Current.ApplicationTheme = iNKORE.UI.WPF.Modern.ApplicationTheme.Dark;
-    }
-  }
-
-  private async void BtnAddProject_Click(object sender, RoutedEventArgs e)
+  private void BtnAddProject_Click(object sender, RoutedEventArgs e)
   {
     string newName = txtNewProject.Text.Trim();
     if (string.IsNullOrEmpty(newName)) return;
     if (SavedProjects.Any(p => p.Name.Equals(newName, StringComparison.OrdinalIgnoreCase))) return;
 
-    if (!await ValidateProjectExistsAsync(newName)) return;
-
     var settings = AppSettingsService.Instance;
-    SavedProjects.Add(new ProjectItem
+    var newProj = new ProjectItem
     {
       Name = newName,
       IsSelected = true,
       Branch = settings.DefaultBranch,
       RunSast = settings.DefaultRunSast,
       RunSca = settings.DefaultRunSca,
-      Incremental = settings.DefaultIncremental
-    });
+      Incremental = settings.DefaultIncremental,
+      Tags = settings.DefaultTags,
+      ProjectTags = settings.DefaultProjectTags,
+      ProjectGroups = settings.DefaultProjectGroups
+    };
 
-    SaveProjects();
+    SavedProjects.Add(newProj);
+    ProjectPersistenceService.Save(SavedProjects);
+    dgProjects.SelectedItem = newProj;
     txtNewProject.Clear();
+  }
+
+  private void TxtNewProject_KeyDown(object sender, System.Windows.Input.KeyEventArgs e)
+  {
+    if (e.Key == System.Windows.Input.Key.Enter)
+    {
+      BtnAddProject_Click(sender, e);
+    }
   }
 
   private void BtnRemoveProject_Click(object sender, RoutedEventArgs e)
   {
-    if (sender is FrameworkElement element && element.DataContext is ProjectItem project)
+    try
     {
-      SavedProjects.Remove(project);
-      if (_selectedProject == project)
-        ClearDetailPanel();
-      SaveProjects();
+      if (sender is FrameworkElement element && element.DataContext is ProjectItem project)
+      {
+        var confirm = MessageBox.Show($"Deseja realmente remover o projeto \"{project.Name}\"?", "Confirmar Remoção", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        SavedProjects.Remove(project);
+        if (_selectedProject == project)
+          ClearDetailPanel();
+        ProjectPersistenceService.Save(SavedProjects);
+      }
     }
-  }
-
-  private async void BtnImportSolution_Click(object sender, RoutedEventArgs e)
-  {
-    var dialog = new OpenFileDialog
+    catch (Exception ex)
     {
-      Filter = "Solution files (*.sln)|*.sln",
-      Title = "Selecione um arquivo .sln"
-    };
-
-    if (dialog.ShowDialog() != true) return;
-
-    var projects = SolutionParserService.ParseSolution(dialog.FileName);
-    int added = await AddValidatedProjectsToList(projects);
-    AppendToConsole($"[IMPORTAÇÃO] {added} projeto(s) importado(s) de: {dialog.FileName}");
-  }
-
-  private async void BtnScanDirectory_Click(object sender, RoutedEventArgs e)
-  {
-    var dialog = new OpenFolderDialog
-    {
-      Title = "Selecione a pasta raiz"
-    };
-
-    if (dialog.ShowDialog() != true) return;
-
-    var projects = DirectoryScannerService.ScanDirectory(dialog.FolderName);
-    int added = await AddValidatedProjectsToList(projects);
-    AppendToConsole($"[SCANNER] {added} projeto(s) encontrado(s) em: {dialog.FolderName}");
-  }
-
-  private async Task<int> AddValidatedProjectsToList(List<ProjectItem> projects)
-  {
-    int count = 0;
-    foreach (var p in projects)
-    {
-      if (SavedProjects.Any(existing => existing.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
-        continue;
-
-      if (!await ValidateProjectExistsAsync(p.Name))
-        return count;
-
-      SavedProjects.Add(p);
-      count++;
+      MessageBox.Show("Erro ao remover projeto: " + ex.Message, "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
     }
-    if (count > 0) SaveProjects();
-    return count;
-  }
-
-  private async Task<bool> ValidateProjectExistsAsync(string projectName)
-  {
-    var settings = AppSettingsService.Instance;
-
-    if (settings.BypassApiValidation)
-    {
-      return true;
-    }
-
-    string apiKey = LoadDecryptedApiKey();
-
-    if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(settings.Tenant))
-    {
-      MessageBox.Show("API Key e Tenant são obrigatórios. Configure-os na aba Configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-      return false;
-    }
-
-    var apiService = new CheckmarxApiService();
-    var validation = await apiService.ValidateProjectExistsAsync(
-        projectName, settings.Tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
-
-    if (validation.ApiCallFailed)
-    {
-      var result = MessageBox.Show(
-          $"{validation.ApiErrorMessage}\n\nDeseja ignorar esta validação de API e adicionar/importar o projeto mesmo assim?",
-          "Erro de Validação (API)",
-          MessageBoxButton.YesNo,
-          MessageBoxImage.Warning);
-          
-      return result == MessageBoxResult.Yes;
-    }
-
-    if (!validation.ProjectFound)
-    {
-      var result = MessageBox.Show(
-          $"{validation.Message}\n\nDeseja adicionar/importar o projeto mesmo assim? (Nota: Ao escanear, se o projeto não existir, ele será criado no Checkmarx One)",
-          "Projeto Não Encontrado",
-          MessageBoxButton.YesNo,
-          MessageBoxImage.Warning);
-
-      return result == MessageBoxResult.Yes;
-    }
-
-    return true;
   }
 
   private void DgProjects_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
   {
-    if (dgProjects.SelectedItem is ProjectItem project)
-      PopulateDetailPanel(project);
-    else
-      ClearDetailPanel();
+    try
+    {
+      if (dgProjects.SelectedItem is ProjectItem project)
+      {
+        PopulateDetailPanel(project);
+      }
+      else
+      {
+        ClearDetailPanel();
+      }
+      UpdateScanButtonState();
+    }
+    catch (Exception ex)
+    {
+      System.Diagnostics.Debug.WriteLine("Erro ao selecionar projeto: " + ex.Message);
+    }
   }
 
   private void PopulateDetailPanel(ProjectItem project)
@@ -260,6 +179,7 @@ public partial class MainWindow : Window
     lblDetailTitle.Text = $"Editando: {project.Name}";
     pnlProjectDetail.IsEnabled = true;
 
+    txtDetailName.Text = project.Name;
     txtDetailLocalPath.Text = project.LocalPath;
     txtDetailBranch.Text = project.Branch;
     txtDetailTags.Text = project.Tags;
@@ -277,9 +197,10 @@ public partial class MainWindow : Window
     _isUpdatingDetail = true;
     _selectedProject = null;
 
-    lblDetailTitle.Text = "Selecione um projeto na lista";
+    lblDetailTitle.Text = "Dê duplo clique em um projeto para editar";
     pnlProjectDetail.IsEnabled = false;
 
+    txtDetailName.Text = "";
     txtDetailLocalPath.Text = "";
     txtDetailBranch.Text = "";
     txtDetailTags.Text = "";
@@ -292,26 +213,65 @@ public partial class MainWindow : Window
     _isUpdatingDetail = false;
   }
 
-  private void DetailField_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
+  private async void DetailField_TextChanged(object sender, System.Windows.Controls.TextChangedEventArgs e)
   {
-    if (_isUpdatingDetail || _selectedProject == null) return;
+    try
+    {
+      if (_isUpdatingDetail || _selectedProject == null) return;
 
-    _selectedProject.LocalPath = txtDetailLocalPath.Text;
-    _selectedProject.Branch = txtDetailBranch.Text;
-    _selectedProject.Tags = txtDetailTags.Text;
-    _selectedProject.ProjectTags = txtDetailProjectTags.Text;
-    _selectedProject.ProjectGroups = txtDetailProjectGroups.Text;
-    SaveProjects();
+      string newName = txtDetailName.Text.Trim();
+      if (!string.IsNullOrEmpty(newName))
+      {
+        _selectedProject.Name = newName;
+        lblDetailTitle.Text = $"Editando: {newName}";
+      }
+
+      _selectedProject.LocalPath = txtDetailLocalPath.Text;
+      _selectedProject.Branch = txtDetailBranch.Text;
+      _selectedProject.Tags = txtDetailTags.Text;
+      _selectedProject.ProjectTags = txtDetailProjectTags.Text;
+      _selectedProject.ProjectGroups = txtDetailProjectGroups.Text;
+
+      await SaveProjectsDebouncedAsync();
+    }
+    catch (Exception ex)
+    {
+      System.Diagnostics.Debug.WriteLine("Erro em DetailField_TextChanged: " + ex.Message);
+    }
   }
 
-  private void DetailCheckbox_Changed(object sender, RoutedEventArgs e)
+  private async Task SaveProjectsDebouncedAsync()
   {
-    if (_isUpdatingDetail || _selectedProject == null) return;
+    _saveCts?.Cancel();
+    _saveCts = new CancellationTokenSource();
+    var token = _saveCts.Token;
+    try
+    {
+      await Task.Delay(300, token);
+      await Task.Run(() => ProjectPersistenceService.Save(SavedProjects), token);
+    }
+    catch (TaskCanceledException)
+    {
+      System.Diagnostics.Debug.WriteLine("Save debounce cancelado.");
+    }
+  }
 
-    _selectedProject.RunSast = chkDetailSast.IsChecked == true;
-    _selectedProject.RunSca = chkDetailSca.IsChecked == true;
-    _selectedProject.Incremental = chkDetailIncremental.IsChecked == true;
-    SaveProjects();
+  private async void DetailCheckbox_Changed(object sender, RoutedEventArgs e)
+  {
+    try
+    {
+      if (_isUpdatingDetail || _selectedProject == null) return;
+
+      _selectedProject.RunSast = chkDetailSast.IsChecked == true;
+      _selectedProject.RunSca = chkDetailSca.IsChecked == true;
+      _selectedProject.Incremental = chkDetailIncremental.IsChecked == true;
+
+      await SaveProjectsDebouncedAsync();
+    }
+    catch (Exception ex)
+    {
+      System.Diagnostics.Debug.WriteLine("Erro em DetailCheckbox_Changed: " + ex.Message);
+    }
   }
 
   private void BtnBrowseProjectFolder_Click(object sender, RoutedEventArgs e)
@@ -321,34 +281,6 @@ public partial class MainWindow : Window
     {
       txtDetailLocalPath.Text = dialog.FolderName;
     }
-  }
-
-  private void BtnApplyBatchTags_Click(object sender, RoutedEventArgs e)
-  {
-    var selected = SavedProjects.Where(p => p.IsSelected).ToList();
-    if (selected.Count == 0)
-    {
-      MessageBox.Show("Selecione pelo menos um projeto (☑) na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-      return;
-    }
-
-    string batchTags = txtBatchTags.Text.Trim();
-    string batchProjectTags = txtBatchProjectTags.Text.Trim();
-    string batchProjectGroups = txtBatchProjectGroups.Text.Trim();
-
-    foreach (var project in selected)
-    {
-      if (!string.IsNullOrEmpty(batchTags)) project.Tags = batchTags;
-      if (!string.IsNullOrEmpty(batchProjectTags)) project.ProjectTags = batchProjectTags;
-      if (!string.IsNullOrEmpty(batchProjectGroups)) project.ProjectGroups = batchProjectGroups;
-    }
-
-    SaveProjects();
-
-    if (_selectedProject != null && selected.Contains(_selectedProject))
-      PopulateDetailPanel(_selectedProject);
-
-    AppendToConsole($"[LOTE] Tags aplicadas a {selected.Count} projeto(s).");
   }
 
   private void BtnSettingBrowseCli_Click(object sender, RoutedEventArgs e)
@@ -364,23 +296,20 @@ public partial class MainWindow : Window
 
   private async void BtnSettingInstallCli_Click(object sender, RoutedEventArgs e)
   {
-    string url = "https://github.com/Checkmarx/ast-cli/releases/latest/download/ast-cli_windows_x64.zip";
-    string destFolder = @"C:\Checkmarx";
-    string zipPath = Path.Combine(Path.GetTempPath(), "ast-cli.zip");
-
     btnSettingInstallCli.IsEnabled = false;
     AppendToConsole("Baixando Checkmarx CLI mais recente pelo GitHub...");
     try
     {
-      using HttpClient client = new();
-      var response = await client.GetByteArrayAsync(url);
-      await File.WriteAllBytesAsync(zipPath, response);
+      using var cts = new CancellationTokenSource();
+      string cliPath = await CliInstallerService.DownloadAndInstallCliAsync(
+          CheckmarxApiService.SharedHttpClient,
+          AppConstants.CliDownloadUrl,
+          AppConstants.DefaultCliDirectory,
+          msg => AppendToConsole(msg),
+          cts.Token);
 
-      if (!Directory.Exists(destFolder)) Directory.CreateDirectory(destFolder);
-      ZipFile.ExtractToDirectory(zipPath, destFolder, true);
-
-      txtSettingCliPath.Text = Path.Combine(destFolder, "cx.exe");
-      AppendToConsole("CLI instalado com sucesso em: " + txtSettingCliPath.Text);
+      txtSettingCliPath.Text = cliPath;
+      UpdateScanButtonState();
     }
     catch (Exception ex)
     {
@@ -390,6 +319,44 @@ public partial class MainWindow : Window
     {
       btnSettingInstallCli.IsEnabled = true;
     }
+  }
+
+  private void BtnScanDirectory_Click(object sender, RoutedEventArgs e)
+  {
+    var dialog = new OpenFolderDialog
+    {
+      Title = "Selecione a pasta raiz do projeto"
+    };
+
+    if (dialog.ShowDialog() != true) return;
+
+    var projects = DirectoryScannerService.ScanDirectory(dialog.FolderName);
+    int added = AddProjectsToList(projects);
+    AppendToConsole($"[SCANNER] {added} projeto(s) encontrado(s) em: {dialog.FolderName}");
+  }
+
+  private int AddProjectsToList(List<ProjectItem> projects)
+  {
+    int count = 0;
+    ProjectItem? lastAdded = null;
+    foreach (var p in projects)
+    {
+      if (SavedProjects.Any(existing => existing.Name.Equals(p.Name, StringComparison.OrdinalIgnoreCase)))
+        continue;
+
+      SavedProjects.Add(p);
+      lastAdded = p;
+      count++;
+    }
+    if (count > 0)
+    {
+      ProjectPersistenceService.Save(SavedProjects);
+      if (lastAdded != null)
+      {
+        dgProjects.SelectedItem = lastAdded;
+      }
+    }
+    return count;
   }
 
   private async void BtnSettingAuth_Click(object sender, RoutedEventArgs e)
@@ -405,65 +372,89 @@ public partial class MainWindow : Window
       MessageBox.Show("Caminho do CLI inválido. Verifique se o arquivo cx.exe existe.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
       return;
     }
-    if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey))
+    if (string.IsNullOrEmpty(tenant) || string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(baseUri) || string.IsNullOrEmpty(baseAuthUri))
     {
-      MessageBox.Show("Tenant Name e API Key são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+      MessageBox.Show("Todos os campos de credenciais e conexão são obrigatórios.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
       return;
     }
 
-    SaveEncryptedApiKey(apiKey);
-
     lblSettingAuthStatus.Text = "Autenticando...";
-    lblSettingAuthStatus.Foreground = Brushes.Orange;
+    lblSettingAuthStatus.Foreground = (Brush)FindResource("WarningBrush");
     btnSettingAuth.IsEnabled = false;
 
-    AppendToConsole("--- Iniciando Autenticação ---");
-    string args = $"auth validate --tenant \"{tenant}\" --apikey \"{apiKey}\" --base-uri \"{baseUri}\" --base-auth-uri \"{baseAuthUri}\"";
-
-    using var cts = new CancellationTokenSource();
-    bool success = await _cliService.RunScanAsync(cliPath, args, null!, apiKey, cts.Token);
-
-    if (success)
+    try
     {
-      lblSettingAuthStatus.Text = "Autenticado";
-      lblSettingAuthStatus.Foreground = Brushes.LightGreen;
-      btnScan.IsEnabled = true;
-      AppendToConsole("Autenticação validada com sucesso.\n");
+      AppendToConsole("--- Iniciando Autenticação ---");
+
+      var envVars = new Dictionary<string, string>
+      {
+          { "CX_APIKEY", apiKey },
+          { "CX_TENANT", tenant },
+          { "CX_BASE_URI", baseUri },
+          { "CX_BASE_AUTH_URI", baseAuthUri }
+      };
+
+      using var cts = new CancellationTokenSource();
+      bool success = await _cliService.RunScanAsync(cliPath, new[] { "auth", "validate" }, AppDomain.CurrentDomain.BaseDirectory, envVars, cts.Token);
+
+      if (success)
+      {
+        CredentialService.SaveEncryptedApiKey(apiKey);
+        lblSettingAuthStatus.Text = "Autenticado";
+        lblSettingAuthStatus.Foreground = (Brush)FindResource("SuccessBrush");
+        _isAuthenticatedInSession = true;
+        UpdateScanButtonState();
+        AppendToConsole("Autenticação validada com sucesso.\n");
+      }
+      else
+      {
+        lblSettingAuthStatus.Text = "Falha na Validação";
+        lblSettingAuthStatus.Foreground = (Brush)FindResource("ErrorBrush");
+        _isAuthenticatedInSession = false;
+        UpdateScanButtonState();
+        AppendToConsole("Falha na validação de autenticação. Verifique suas credenciais.\n");
+      }
     }
-    else
+    catch (Exception ex)
     {
-      lblSettingAuthStatus.Text = "Falha na Validação";
-      lblSettingAuthStatus.Foreground = Brushes.Red;
-      AppendToConsole("Falha na validação de autenticação. Verifique suas credenciais.\n");
+      AppendToConsole("Erro inesperado na autenticação: " + ex.Message);
+      lblSettingAuthStatus.Text = "Erro na Autenticação";
+      lblSettingAuthStatus.Foreground = (Brush)FindResource("ErrorBrush");
+      _isAuthenticatedInSession = false;
+      UpdateScanButtonState();
     }
-    btnSettingAuth.IsEnabled = true;
-    UpdateFooterStatus();
+    finally
+    {
+      btnSettingAuth.IsEnabled = true;
+      UpdateFooterStatus();
+    }
   }
 
   private void BtnSaveSettings_Click(object sender, RoutedEventArgs e)
   {
-    var settings = AppSettingsService.Instance;
-    settings.CliPath = txtSettingCliPath.Text;
-    settings.Tenant = txtSettingTenant.Text.Trim();
-    settings.BaseUri = txtSettingBaseUri.Text.Trim();
-    settings.BaseAuthUri = txtSettingBaseAuthUri.Text.Trim();
-    settings.DefaultBranch = txtSettingDefaultBranch.Text.Trim();
-    settings.DefaultRunSast = chkSettingDefaultSast.IsChecked == true;
-    settings.DefaultRunSca = chkSettingDefaultSca.IsChecked == true;
-    settings.DefaultIncremental = chkSettingDefaultIncremental.IsChecked == true;
-    settings.BypassApiValidation = chkSettingBypassValidation.IsChecked == true;
-    settings.Theme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
-
-    if (!string.IsNullOrEmpty(txtSettingApiKey.Password))
+    try
     {
-      SaveEncryptedApiKey(txtSettingApiKey.Password);
+      var settings = AppSettingsService.Instance;
+      
+      settings.Theme = cmbSettingTheme.SelectedIndex == 1 ? "Light" : "Dark";
+
+      string apiKey = txtSettingApiKey.Password;
+      if (!string.IsNullOrEmpty(apiKey))
+      {
+        CredentialService.SaveEncryptedApiKey(apiKey);
+      }
+
+      AppSettingsService.Save();
+      ApplyTheme(settings.Theme);
+      UpdateFooterStatus();
+      UpdateScanButtonState();
+
+      MessageBox.Show("Configurações salvas com sucesso!", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
     }
-
-    AppSettingsService.Save(settings);
-    ApplyTheme(settings.Theme);
-    UpdateFooterStatus();
-
-    MessageBox.Show("Configurações salvas com sucesso!", "Sucesso", MessageBoxButton.OK, MessageBoxImage.Information);
+    catch (Exception ex)
+    {
+      MessageBox.Show("Erro ao salvar configurações: " + ex.Message, "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
   }
 
   private void CmbSettingTheme_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
@@ -475,39 +466,91 @@ public partial class MainWindow : Window
 
   private async void BtnScan_Click(object sender, RoutedEventArgs e)
   {
-    var settings = AppSettingsService.Instance;
-    string cliPath = settings.CliPath;
-    string tenant = settings.Tenant;
-    string apiKey = LoadDecryptedApiKey();
+    try
+    {
+      var settings = AppSettingsService.Instance;
+      string cliPath = settings.CliPath;
+      string tenant = settings.Tenant;
+      string apiKey = CredentialService.LoadDecryptedApiKey();
 
-    var selectedProjects = SavedProjects.Where(p => p.IsSelected).ToList();
+      if (dgProjects.SelectedItem is not ProjectItem selectedProject)
+      {
+        MessageBox.Show("Selecione um projeto na lista lateral para iniciar o scan.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
+        return;
+      }
 
+      var selectedProjects = new List<ProjectItem> { selectedProject };
+
+      if (!ValidateScanPrerequisites(selectedProjects, cliPath, tenant, apiKey))
+      {
+        return;
+      }
+
+      if (!await ConfirmFullScanIfNeededAsync(selectedProjects))
+      {
+        return;
+      }
+
+      var apiService = new CheckmarxApiService();
+      var projectIds = await ValidateProjectsInPortalAsync(selectedProjects, tenant, apiKey, settings, apiService);
+      if (projectIds == null)
+      {
+        return;
+      }
+
+      await ExecuteScanQueueAsync(selectedProjects, cliPath, tenant, apiKey, settings, apiService, projectIds);
+    }
+    catch (Exception ex)
+    {
+      MessageBox.Show("Erro ao iniciar a fila de scans: " + ex.Message, "Erro Crítico", MessageBoxButton.OK, MessageBoxImage.Error);
+      SetScanRunningState(false);
+    }
+  }
+
+  private bool ValidateScanPrerequisites(List<ProjectItem> selectedProjects, string cliPath, string tenant, string apiKey)
+  {
     if (!File.Exists(cliPath))
     {
       MessageBox.Show("Caminho do CLI inválido nas configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-      return;
+      return false;
     }
     if (selectedProjects.Count == 0)
     {
       MessageBox.Show("Selecione pelo menos um projeto na lista.", "Aviso", MessageBoxButton.OK, MessageBoxImage.Warning);
-      return;
+      return false;
     }
-
     if (string.IsNullOrEmpty(apiKey) || string.IsNullOrEmpty(tenant))
     {
       MessageBox.Show("API Key e Tenant são obrigatórios. Configure-os na aba Configurações.", "Erro", MessageBoxButton.OK, MessageBoxImage.Error);
-      return;
+      return false;
     }
+    return true;
+  }
 
-    var apiService = new CheckmarxApiService();
+  private async Task<bool> ConfirmFullScanIfNeededAsync(List<ProjectItem> selectedProjects)
+  {
+    bool hasFullScan = selectedProjects.Any(p => !p.Incremental);
+    if (hasFullScan)
+    {
+      var result = MessageBox.Show(
+          "Você selecionou realizar scan completo (não incremental) para um ou mais projetos.\n\n" +
+          "Atenção: Executar um scan completo pode fazer com que vulnerabilidades antigas sejam tratadas como novas no Checkmarx One.\n\n" +
+          "Deseja prosseguir com o scan?",
+          "Confirmação de Scan Completo",
+          MessageBoxButton.YesNo,
+          MessageBoxImage.Warning);
+
+      return result == MessageBoxResult.Yes;
+    }
+    return true;
+  }
+
+  private async Task<Dictionary<string, string>?> ValidateProjectsInPortalAsync(
+      List<ProjectItem> selectedProjects, string tenant, string apiKey, AppSettings settings, CheckmarxApiService apiService)
+  {
+    var projectIds = new Dictionary<string, string>();
     foreach (var proj in selectedProjects)
     {
-      if (settings.BypassApiValidation)
-      {
-        AppendToConsole($"[VALIDAÇÃO] Validação via API para o projeto \"{proj.Name}\" ignorada (configuração ativa).");
-        continue;
-      }
-
       AppendToConsole($"[VALIDAÇÃO] Verificando existência do projeto \"{proj.Name}\"...");
       var validation = await apiService.ValidateProjectExistsAsync(
           proj.Name, tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
@@ -515,39 +558,27 @@ public partial class MainWindow : Window
       if (validation.ApiCallFailed)
       {
         AppendToConsole($"[ERRO] {validation.ApiErrorMessage}");
-        var result = MessageBox.Show(
-            $"{validation.ApiErrorMessage}\n\nDeseja ignorar este erro de validação via API e prosseguir com o scan mesmo assim?",
-            "Erro de Validação (API)",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
-
-        if (result != MessageBoxResult.Yes)
-        {
-          return;
-        }
-        AppendToConsole("[VALIDAÇÃO] Erro de validação ignorado pelo usuário.");
+        MessageBox.Show(validation.ApiErrorMessage, "Erro de Validação", MessageBoxButton.OK, MessageBoxImage.Error);
+        return null;
       }
-      else if (!validation.ProjectFound)
+
+      if (!validation.ProjectFound)
       {
         AppendToConsole($"[ERRO] {validation.Message}");
-        var result = MessageBox.Show(
-            $"{validation.Message}\n\nDeseja prosseguir com o scan mesmo assim? (Nota: Se o projeto não existir, ele será criado no Checkmarx One)",
-            "Projeto Não Encontrado",
-            MessageBoxButton.YesNo,
-            MessageBoxImage.Warning);
+        MessageBox.Show(validation.Message, "Projeto Não Encontrado", MessageBoxButton.OK, MessageBoxImage.Error);
+        return null;
+      }
 
-        if (result != MessageBoxResult.Yes)
-        {
-          return;
-        }
-        AppendToConsole("[VALIDAÇÃO] Validação ignorada (projeto não encontrado).");
-      }
-      else
-      {
-        AppendToConsole($"[VALIDAÇÃO] Projeto \"{proj.Name}\" encontrado (ID: {validation.ProjectId}).");
-      }
+      projectIds[proj.Name] = validation.ProjectId ?? string.Empty;
+      AppendToConsole($"[VALIDAÇÃO] Projeto \"{proj.Name}\" encontrado (ID: {validation.ProjectId}).");
     }
+    return projectIds;
+  }
 
+  private async Task ExecuteScanQueueAsync(
+      List<ProjectItem> selectedProjects, string cliPath, string tenant, string apiKey, AppSettings settings, 
+      CheckmarxApiService apiService, Dictionary<string, string> projectIds)
+  {
     SetScanRunningState(true);
     _scanCts = new CancellationTokenSource();
 
@@ -559,38 +590,44 @@ public partial class MainWindow : Window
       projectIndex++;
       AppendToConsole($"\n\n=== [{projectIndex}/{selectedProjects.Count}] Scan: {proj.Name} ===");
       UpdateProgressLabel($"Escaneando {proj.Name} ({projectIndex}/{selectedProjects.Count})...");
-      progressBar.Value = 0;
+      
+      Dispatcher.Invoke(() => progressBar.Value = 0);
 
       string workingDir = ResolveWorkingDirectory(proj);
       string reportDir = Path.Combine(
           Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
           "CxOneScan", "Reports", proj.Name);
 
-      try
-      {
-          if (Directory.Exists(reportDir))
-              Directory.Delete(reportDir, true);
-          Directory.CreateDirectory(reportDir);
-      }
-      catch (Exception ex)
-      {
-          AppendToConsole($"[AVISO] Falha ao limpar/criar pasta de relatórios: {ex.Message}");
-      }
-      List<string> scanTypes = BuildScanTypes(proj);
+      CleanReportDirectory(reportDir);
 
+      List<string> scanTypes = BuildScanTypes(proj);
       if (scanTypes.Count == 0)
       {
         AppendToConsole($"[AVISO] {proj.Name}: nenhum tipo de scan selecionado, pulando.");
         continue;
       }
 
-      string args = CxCliService.BuildScanArguments(
+      bool runIncremental = proj.Incremental;
+      if (runIncremental)
+      {
+        runIncremental = await VerifyBaselineScanAsync(proj, tenant, apiKey, settings, apiService, projectIds);
+      }
+
+      var args = CxCliService.BuildScanArguments(
           proj.Name, proj.Branch, scanTypes,
           proj.Tags, proj.ProjectTags, proj.ProjectGroups,
-          tenant, apiKey, settings.BaseUri, settings.BaseAuthUri, reportDir,
-          proj.Incremental);
+          reportDir,
+          runIncremental);
 
-      bool success = await _cliService.RunScanAsync(cliPath, args, workingDir, apiKey, _scanCts.Token);
+      var envVars = new Dictionary<string, string>
+      {
+          { "CX_APIKEY", apiKey },
+          { "CX_TENANT", tenant },
+          { "CX_BASE_URI", settings.BaseUri },
+          { "CX_BASE_AUTH_URI", settings.BaseAuthUri }
+      };
+
+      bool success = await _cliService.RunScanAsync(cliPath, args, workingDir, envVars, _scanCts.Token);
 
       if (_scanCts.Token.IsCancellationRequested)
       {
@@ -612,12 +649,50 @@ public partial class MainWindow : Window
       mainTabControl.SelectedIndex = 1;
   }
 
+  private void CleanReportDirectory(string reportDir)
+  {
+    try
+    {
+      Directory.CreateDirectory(reportDir);
+      string jsonReport = Path.Combine(reportDir, "cx_result.json");
+      string htmlReport = Path.Combine(reportDir, "cx_result.html");
+      if (File.Exists(jsonReport)) File.Delete(jsonReport);
+      if (File.Exists(htmlReport)) File.Delete(htmlReport);
+    }
+    catch (Exception ex)
+    {
+      AppendToConsole($"[AVISO] Falha ao limpar arquivos de relatórios anteriores: {ex.Message}");
+    }
+  }
+
+  private async Task<bool> VerifyBaselineScanAsync(
+      ProjectItem proj, string tenant, string apiKey, AppSettings settings, CheckmarxApiService apiService, Dictionary<string, string> projectIds)
+  {
+    AppendToConsole($"[VALIDAÇÃO] Verificando histórico de scans da branch \"{proj.Branch}\" no Checkmarx One...");
+    if (projectIds.TryGetValue(proj.Name, out string? projectId) && !string.IsNullOrEmpty(projectId))
+    {
+      bool hasCompletedScan = await apiService.CheckHasCompletedScanAsync(
+          projectId, proj.Branch, tenant, apiKey, settings.BaseUri, settings.BaseAuthUri);
+
+      if (!hasCompletedScan)
+      {
+        AppendToConsole($"[AVISO] Nenhum scan completo anterior foi encontrado na branch \"{proj.Branch}\". O primeiro scan será realizado como FULL para estabelecer a baseline.");
+        return false;
+      }
+      else
+      {
+        AppendToConsole($"[INFO] Scan completo anterior detectado. Executando scan incremental.");
+      }
+    }
+    return true;
+  }
+
   private static string ResolveWorkingDirectory(ProjectItem project)
   {
     if (!string.IsNullOrWhiteSpace(project.LocalPath) && Directory.Exists(project.LocalPath))
       return project.LocalPath;
 
-    return Directory.GetCurrentDirectory();
+    return AppDomain.CurrentDomain.BaseDirectory;
   }
 
   private static List<string> BuildScanTypes(ProjectItem project)
@@ -647,6 +722,7 @@ public partial class MainWindow : Window
   {
     btnScan.IsEnabled = !isRunning;
     btnCancel.IsEnabled = isRunning;
+    progressBar.Visibility = isRunning ? Visibility.Visible : Visibility.Collapsed;
     progressBar.Value = isRunning ? 0 : 100;
     UpdateProgressLabel(isRunning ? "Iniciando..." : "Pronto");
 
@@ -654,6 +730,36 @@ public partial class MainWindow : Window
     {
       _scanCts?.Dispose();
       _scanCts = null;
+      UpdateScanButtonState();
+    }
+  }
+
+  private void UpdateScanButtonState()
+  {
+    var settings = AppSettingsService.Instance;
+    string apiKey = CredentialService.LoadDecryptedApiKey();
+
+    bool hasCredentials = !string.IsNullOrEmpty(settings.Tenant) && !string.IsNullOrEmpty(apiKey);
+    bool hasSelectedProject = dgProjects.SelectedItem is ProjectItem;
+
+    if (!hasSelectedProject)
+    {
+      btnScan.IsEnabled = false;
+      btnScan.ToolTip = "Selecione um projeto na lista lateral para habilitar o scan.";
+      return;
+    }
+
+    bool canScan = hasCredentials && (settings.KeepLoggedIn || _isAuthenticatedInSession);
+
+    if (canScan)
+    {
+      btnScan.IsEnabled = true;
+      btnScan.ToolTip = null;
+    }
+    else
+    {
+      btnScan.IsEnabled = false;
+      btnScan.ToolTip = "Por favor, realize a autenticação na aba Configurações para habilitar o scan.";
     }
   }
 
@@ -663,6 +769,19 @@ public partial class MainWindow : Window
     _cliService.KillActiveProcess();
     AppendToConsole("[CANCELADO] Operação de scan cancelada pelo usuário.");
     SetScanRunningState(false);
+  }
+
+  private void BtnClearResults_Click(object sender, RoutedEventArgs e)
+  {
+    try
+    {
+      ScanResults.Clear();
+      AppendToConsole("[DASHBOARD] Resultados limpos com sucesso.");
+    }
+    catch (Exception ex)
+    {
+      System.Diagnostics.Debug.WriteLine("Erro ao limpar resultados: " + ex.Message);
+    }
   }
 
   private void BtnOpenReport_Click(object sender, RoutedEventArgs e)
@@ -712,7 +831,6 @@ public partial class MainWindow : Window
                           toolName = dName.GetString() ?? "";
                   }
 
-                  // Build rules severity dictionary
                   var ruleSeverities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
                   if (run.TryGetProperty("tool", out var tObj) && tObj.TryGetProperty("driver", out var dObj))
                   {
@@ -743,11 +861,11 @@ public partial class MainWindow : Window
                       foreach (var vuln in results.EnumerateArray())
                       {
                           string ruleId = vuln.TryGetProperty("ruleId", out var rId) ? rId.GetString() ?? "Desconhecido" : "Desconhecido";
-                          
+
                           string msg = "Sem detalhes";
                           if (vuln.TryGetProperty("message", out var messageObj) && messageObj.TryGetProperty("text", out var textProp))
                               msg = textProp.GetString() ?? "Sem detalhes";
-                          
+
                           string fileLoc = "Desconhecido";
                           int lineLoc = 0;
                           if (vuln.TryGetProperty("locations", out var locs) && locs.ValueKind == JsonValueKind.Array && locs.GetArrayLength() > 0)
@@ -757,20 +875,18 @@ public partial class MainWindow : Window
                               {
                                   if (physLoc.TryGetProperty("artifactLocation", out var artLoc) && artLoc.TryGetProperty("uri", out var uriProp))
                                       fileLoc = uriProp.GetString() ?? "Desconhecido";
-                                      
+
                                   if (physLoc.TryGetProperty("region", out var region) && region.TryGetProperty("startLine", out var sLine))
                                       lineLoc = sLine.GetInt32();
                               }
                           }
 
-                          // Get severity from dictionary
                           string severity = "Medium";
                           if (ruleSeverities.TryGetValue(ruleId, out var mappedSeverity))
                           {
                               severity = mappedSeverity;
                           }
 
-                          // Type parsing (fallback to ruleId if toolName is generic)
                           string type = "SAST";
                           if (toolName.Contains("SCA", StringComparison.OrdinalIgnoreCase) || ruleId.Contains("(sca)", StringComparison.OrdinalIgnoreCase))
                               type = "SCA";
@@ -810,7 +926,7 @@ public partial class MainWindow : Window
 
           var prompt = new StringBuilder();
           prompt.AppendLine("Atue como um especialista em segurança de código. O Checkmarx encontrou as seguintes vulnerabilidades no meu projeto. Como posso corrigi-las?");
-          
+
           int count = 1;
           foreach (var v in selectedVulns)
           {
@@ -884,59 +1000,63 @@ public partial class MainWindow : Window
     e.Handled = true;
   }
 
-  private readonly string KeyFile = Path.Combine(
-      Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-      "CxDesktopWrapper", "secure_key.dat");
-
-  private void SaveEncryptedApiKey(string apiKey)
+  private void ApplyTheme(string theme)
   {
     try
     {
-      Directory.CreateDirectory(Path.GetDirectoryName(KeyFile)!);
-      byte[] plainBytes = Encoding.UTF8.GetBytes(apiKey);
-      byte[] dataToWrite;
-      try
-      {
-        dataToWrite = ProtectedData.Protect(plainBytes, null, DataProtectionScope.CurrentUser);
-      }
-      catch (PlatformNotSupportedException)
-      {
-        dataToWrite = Encoding.UTF8.GetBytes("FALLBACK:" + Convert.ToBase64String(plainBytes));
-      }
-      File.WriteAllBytes(KeyFile, dataToWrite);
+      iNKORE.UI.WPF.Modern.ThemeManager.SetRequestedTheme(this, theme == "Light" ? iNKORE.UI.WPF.Modern.ElementTheme.Light : iNKORE.UI.WPF.Modern.ElementTheme.Dark);
     }
     catch (Exception ex)
     {
-      AppendToConsole("Erro ao salvar a API Key: " + ex.Message);
+      System.Diagnostics.Debug.WriteLine("Erro ao aplicar tema: " + ex.Message);
     }
   }
 
-  private string LoadDecryptedApiKey()
+  private void TriggerStartupAuthCheck()
   {
-    if (!File.Exists(KeyFile)) return string.Empty;
+    var settings = AppSettingsService.Instance;
+    string apiKey = CredentialService.LoadDecryptedApiKey();
 
-    try
+    if (settings.KeepLoggedIn && !string.IsNullOrEmpty(settings.Tenant) && !string.IsNullOrEmpty(apiKey))
     {
-      byte[] bytes = File.ReadAllBytes(KeyFile);
-      try
+      lblFooterStatus.Text = "⚡ Conectando...";
+      lblFooterStatus.Foreground = (Brush)FindResource("WarningBrush");
+
+      Task.Run(async () =>
       {
-        byte[] plainBytes = ProtectedData.Unprotect(bytes, null, DataProtectionScope.CurrentUser);
-        return Encoding.UTF8.GetString(plainBytes);
-      }
-      catch (PlatformNotSupportedException)
-      {
-        string text = Encoding.UTF8.GetString(bytes);
-        if (text.StartsWith("FALLBACK:"))
+        try
         {
-          byte[] plainBytes = Convert.FromBase64String(text.Substring(9));
-          return Encoding.UTF8.GetString(plainBytes);
+          var api = new CheckmarxApiService();
+          bool connected = await api.TestConnectionAsync(settings.Tenant, apiKey, settings.BaseAuthUri);
+          Dispatcher.Invoke(() =>
+          {
+            if (connected)
+            {
+              lblFooterStatus.Text = "✓ Autenticado";
+              lblFooterStatus.Foreground = (Brush)FindResource("SuccessBrush");
+              _isAuthenticatedInSession = true;
+            }
+            else
+            {
+              lblFooterStatus.Text = "⚠️ Falha na Autenticação";
+              lblFooterStatus.Foreground = (Brush)FindResource("ErrorBrush");
+              _isAuthenticatedInSession = false;
+            }
+            UpdateScanButtonState();
+          });
         }
-        return string.Empty;
-      }
-    }
-    catch
-    {
-      return string.Empty;
+        catch (Exception ex)
+        {
+          System.Diagnostics.Debug.WriteLine("Erro no TriggerStartupAuthCheck: " + ex.Message);
+          Dispatcher.Invoke(() =>
+          {
+            lblFooterStatus.Text = "⚠️ Erro de Rede";
+            lblFooterStatus.Foreground = (Brush)FindResource("ErrorBrush");
+            _isAuthenticatedInSession = false;
+            UpdateScanButtonState();
+          });
+        }
+      });
     }
   }
 }
