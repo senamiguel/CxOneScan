@@ -1,0 +1,55 @@
+<Window x:Class="CxDesktopWrapper.UpdateNotificationWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:CxDesktopWrapper"
+        xmlns:ui="http://schemas.inkore.net/lib/ui/wpf/modern"
+        ui:WindowHelper.UseModernWindowStyle="True"
+        ui:ThemeManager.RequestedTheme="Dark"
+        mc:Ignorable="d"
+        Title="Atualização disponível" Height="540" Width="640" WindowStartupLocation="CenterOwner" ResizeMode="NoResize" ShowInTaskbar="False" Icon="app_logo.png">
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/>
+    </Window.Resources>
+
+    <Grid Margin="22" Background="{DynamicResource ApplicationPageBackgroundThemeBrush}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,6">
+            <TextBlock Text="🎉" FontSize="34" VerticalAlignment="Center" Margin="0,0,12,0"/>
+            <StackPanel VerticalAlignment="Center">
+                <TextBlock Text="Nova versão disponível!" FontSize="20" FontWeight="SemiBold" Foreground="{DynamicResource TextFillColorPrimaryBrush}"/>
+                <TextBlock x:Name="lblVersionLine" FontSize="13" Foreground="{DynamicResource TextFillColorSecondaryBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </StackPanel>
+
+        <Border Grid.Row="1" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="10,6" Margin="0,4,0,10">
+            <StackPanel>
+                <TextBlock x:Name="lblReleaseName" FontWeight="SemiBold" FontSize="14" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap"/>
+                <TextBlock x:Name="lblPublished" FontSize="11" Foreground="{DynamicResource TextFillColorTertiaryBrush}" Margin="0,2,0,0"/>
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="2" Background="{DynamicResource CardBackgroundFillColorDefaultBrush}" BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}" BorderThickness="1" CornerRadius="6" Padding="2">
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="8">
+                <TextBlock x:Name="txtNotes" FontSize="12" Foreground="{DynamicResource TextFillColorSecondaryBrush}" TextWrapping="Wrap" LineHeight="18"/>
+            </ScrollViewer>
+        </Border>
+
+        <CheckBox x:Name="chkSkip" Grid.Row="3" Content="Não me avisar novamente sobre esta versão" Margin="4,12,0,6" Foreground="{DynamicResource TextFillColorSecondaryBrush}" FontSize="12"/>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
+            <Button x:Name="btnLater" Content="Mais tarde" Padding="14,7" Margin="0,0,8,0" Cursor="Hand" Click="BtnLater_Click"/>
+            <Button x:Name="btnPage" Content="Ver no GitHub" Padding="14,7" Margin="0,0,8,0" Cursor="Hand" Click="BtnPage_Click"/>
+            <Button x:Name="btnDownload" Content="Baixar atualização" Padding="14,7" Cursor="Hand" Style="{DynamicResource AccentButtonStyle}" Click="BtnDownload_Click" IsDefault="True"/>
+        </StackPanel>
+    </Grid>
+</Window>

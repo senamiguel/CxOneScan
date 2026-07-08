@@ -41,6 +41,38 @@ public partial class MainWindow : Window
     WireCliServiceEvents();
     UpdateScanButtonState();
     TriggerStartupAuthCheck();
+    Loaded += MainWindow_Loaded;
+  }
+
+  private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
+  {
+    Loaded -= MainWindow_Loaded;
+    try
+    {
+      var settings = AppSettingsService.Instance;
+      var svc = new GitHubReleaseService();
+      var update = await svc.CheckForUpdateAsync();
+      if (update == null || !update.UpdateAvailable) return;
+
+      if (!string.IsNullOrEmpty(settings.SkipUpdateVersion) &&
+          string.Equals(settings.SkipUpdateVersion, update.LatestVersion, StringComparison.OrdinalIgnoreCase))
+      {
+        return;
+      }
+
+      var dlg = new UpdateNotificationWindow(update) { Owner = this };
+      dlg.ShowDialog();
+
+      if (dlg.SkipThisVersion)
+      {
+        settings.SkipUpdateVersion = update.LatestVersion;
+        AppSettingsService.Save();
+      }
+    }
+    catch (Exception ex)
+    {
+      System.Diagnostics.Debug.WriteLine("Update check error: " + ex.Message);
+    }
   }
 
   private void WireCliServiceEvents()

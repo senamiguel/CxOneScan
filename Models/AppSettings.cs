@@ -19,6 +19,7 @@ public class AppSettings : INotifyPropertyChanged
     private string _theme = "Dark";
     private bool _isFirstRunCompleted = false;
     private bool _keepLoggedIn = true;
+    private string _skipUpdateVersion = string.Empty;
 
     public string CliPath
     {
@@ -102,6 +103,12 @@ public class AppSettings : INotifyPropertyChanged
     {
         get => _keepLoggedIn;
         set => SetProperty(ref _keepLoggedIn, value);
+    }
+
+    public string SkipUpdateVersion
+    {
+        get => _skipUpdateVersion;
+        set => SetProperty(ref _skipUpdateVersion, value);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
