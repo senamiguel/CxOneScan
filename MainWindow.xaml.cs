@@ -831,7 +831,8 @@ public partial class MainWindow : Window
                           toolName = dName.GetString() ?? "";
                   }
 
-                  var ruleSeverities = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+                  // Build rules severity and description dictionary
+                  var ruleDetails = new Dictionary<string, (string Severity, string Score, string Description)>(StringComparer.OrdinalIgnoreCase);
                   if (run.TryGetProperty("tool", out var tObj) && tObj.TryGetProperty("driver", out var dObj))
                   {
                       if (dObj.TryGetProperty("rules", out var rules) && rules.ValueKind == JsonValueKind.Array)
@@ -842,16 +843,26 @@ public partial class MainWindow : Window
                               if (string.IsNullOrEmpty(ruleId)) continue;
 
                               string severity = "Medium";
+                              string score = "4.0";
                               if (rule.TryGetProperty("properties", out var props) && props.TryGetProperty("security-severity", out var secSev))
                               {
-                                  string sevStr = secSev.ValueKind == JsonValueKind.Number ? secSev.GetDouble().ToString("0.0", CultureInfo.InvariantCulture) : secSev.GetString() ?? "";
-                                  if (sevStr == "9.0") severity = "Critical";
-                                  else if (sevStr == "7.0") severity = "High";
-                                  else if (sevStr == "4.0") severity = "Medium";
-                                  else if (sevStr == "2.0") severity = "Low";
-                                  else if (sevStr == "1.0") severity = "Info";
+                                  score = secSev.ValueKind == JsonValueKind.Number ? secSev.GetDouble().ToString("0.0", CultureInfo.InvariantCulture) : secSev.GetString() ?? "";
+                                  if (score == "9.0") severity = "Critical";
+                                  else if (score == "7.0") severity = "High";
+                                  else if (score == "4.0") severity = "Medium";
+                                  else if (score == "2.0") severity = "Low";
+                                  else if (score == "1.0") severity = "Info";
                               }
-                              ruleSeverities[ruleId] = severity;
+
+                              string description = "";
+                              if (rule.TryGetProperty("fullDescription", out var fullDesc) && fullDesc.TryGetProperty("text", out var fdText))
+                                  description = fdText.GetString() ?? "";
+                              else if (rule.TryGetProperty("help", out var helpObj) && helpObj.TryGetProperty("text", out var hText))
+                                  description = hText.GetString() ?? "";
+                              else if (rule.TryGetProperty("properties", out var rProps) && rProps.TryGetProperty("description", out var rDesc))
+                                  description = rDesc.GetString() ?? "";
+
+                              ruleDetails[ruleId] = (severity, score, description);
                           }
                       }
                   }
@@ -861,11 +872,11 @@ public partial class MainWindow : Window
                       foreach (var vuln in results.EnumerateArray())
                       {
                           string ruleId = vuln.TryGetProperty("ruleId", out var rId) ? rId.GetString() ?? "Desconhecido" : "Desconhecido";
-
+                          
                           string msg = "Sem detalhes";
                           if (vuln.TryGetProperty("message", out var messageObj) && messageObj.TryGetProperty("text", out var textProp))
                               msg = textProp.GetString() ?? "Sem detalhes";
-
+                          
                           string fileLoc = "Desconhecido";
                           int lineLoc = 0;
                           if (vuln.TryGetProperty("locations", out var locs) && locs.ValueKind == JsonValueKind.Array && locs.GetArrayLength() > 0)
@@ -875,18 +886,24 @@ public partial class MainWindow : Window
                               {
                                   if (physLoc.TryGetProperty("artifactLocation", out var artLoc) && artLoc.TryGetProperty("uri", out var uriProp))
                                       fileLoc = uriProp.GetString() ?? "Desconhecido";
-
+                                      
                                   if (physLoc.TryGetProperty("region", out var region) && region.TryGetProperty("startLine", out var sLine))
                                       lineLoc = sLine.GetInt32();
                               }
                           }
 
+                          // Get severity and description from dictionary
                           string severity = "Medium";
-                          if (ruleSeverities.TryGetValue(ruleId, out var mappedSeverity))
+                          string score = "4.0";
+                          string description = "";
+                          if (ruleDetails.TryGetValue(ruleId, out var details))
                           {
-                              severity = mappedSeverity;
+                              severity = details.Severity;
+                              score = details.Score;
+                              description = details.Description;
                           }
 
+                          // Type parsing (fallback to ruleId if toolName is generic)
                           string type = "SAST";
                           if (toolName.Contains("SCA", StringComparison.OrdinalIgnoreCase) || ruleId.Contains("(sca)", StringComparison.OrdinalIgnoreCase))
                               type = "SCA";
@@ -898,7 +915,9 @@ public partial class MainWindow : Window
                               FileLocation = fileLoc,
                               Line = lineLoc,
                               Severity = severity,
+                              SeverityScore = score,
                               Type = type,
+                              Description = description,
                               IsSelected = true
                           });
                       }
@@ -925,13 +944,24 @@ public partial class MainWindow : Window
           }
 
           var prompt = new StringBuilder();
-          prompt.AppendLine("Atue como um especialista em segurança de código. O Checkmarx encontrou as seguintes vulnerabilidades no meu projeto. Como posso corrigi-las?");
-
+          prompt.AppendLine("Atue como um especialista em segurança de código e analise as vulnerabilidades encontradas pelo Checkmarx no meu projeto. Por favor, forneça explicações sobre o risco de cada uma e recomendações práticas e seguras de correção de código para corrigi-las.Verifique também se essa vulnerabilidade pode ser um falso positivo e explique o motivo. Forneça as respostas em português, de forma clara e objetiva, sem rodeios. Aqui estão os detalhes das vulnerabilidades selecionadas:");
+          prompt.AppendLine();
+          
           int count = 1;
           foreach (var v in selectedVulns)
           {
-              prompt.AppendLine($"{count}) [{v.Id} ({v.Type})] Arquivo: {v.FileLocation} na linha {v.Line}");
-              prompt.AppendLine($"   Detalhe: {v.Message}");
+              prompt.AppendLine($"--- Vulnerabilidade #{count} ---");
+              prompt.AppendLine($"Tipo de Análise: {v.Type}");
+              prompt.AppendLine($"Regra / ID: {v.Id}");
+              prompt.AppendLine($"Severidade: {v.Severity} (Score: {v.SeverityScore})");
+              prompt.AppendLine($"Localização: Arquivo `{v.FileLocation}` na linha {v.Line}");
+              prompt.AppendLine($"Mensagem de Diagnóstico: {v.Message}");
+              if (!string.IsNullOrEmpty(v.Description))
+              {
+                  string cleanDesc = v.Description.Replace("\r\n", " ").Replace("\n", " ").Trim();
+                  prompt.AppendLine($"Descrição/Risco: {cleanDesc}");
+              }
+              prompt.AppendLine();
               count++;
           }
 
